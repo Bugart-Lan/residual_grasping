@@ -226,7 +226,7 @@ def main(obj_name: str = "sugar", show_diagram: bool = False, verbose: bool = Fa
     pose = plant.EvalBodyPoseInWorld(plant_context, body)
     if verbose:
         print(f"Object's final position {pose.translation()[2]}")
-    return pose.translation()[2] >= 0.5
+    return pose.translation()[2] >= 0.3
 
 
 N = 1

@@ -60,7 +60,7 @@ def main():
             config["env_name"],
             meshcat=meshcat,
             time_limit=config["env_time_limit"],
-            debug=False,
+            debug=True,
         )
         check_env(env)
         input("Open meshcat (optional). Press Enter to continue...")
