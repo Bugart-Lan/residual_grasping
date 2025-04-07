@@ -81,8 +81,10 @@ def main():
         )
 
     if args.test:
+        print("Testing mode")
         model = PPO(config["policy_type"], env, n_steps=4, n_epochs=2, batch_size=8, device="cpu")
     elif os.path.exists(zip):
+        print(f"Loading model @ {zip}")
         model = PPO.load(
             zip,
             env,
@@ -91,6 +93,7 @@ def main():
             device="cpu"
         )
     else:
+        print("Creating PPO model...")
         model = PPO(
             config["policy_type"],
             env,

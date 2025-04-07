@@ -12,7 +12,7 @@ from pydrake.systems.framework import DiagramBuilder, LeafSystem
 from utils import _ConfigureParser
 
 
-internal_directive = "package://models/full.dmd.yaml"
+internal_directive = "package://models/internal.dmd.yaml"
 
 
 def GraspCandidateCost(

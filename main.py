@@ -59,6 +59,7 @@ scene_directive = "package://models/full.dmd.yaml"
 
 
 meshcat = StartMeshcat()
+input("Press Enter to continue...")
 
 
 def load_scenario(directive, obj_name="sugar", rng=None):
@@ -66,7 +67,6 @@ def load_scenario(directive, obj_name="sugar", rng=None):
     builder = DiagramBuilder()
     plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
     parser = Parser(plant)
-    # ConfigureParser allows us to use the object files from manipulation package
     _ConfigureParser(parser, include_manipulation=True)
 
     # Load object in random pose
@@ -233,7 +233,7 @@ N = 1
 cnt_success = 0
 for i in range(N):
     print(f"Running {i}-th test...")
-    results = main(obj_name="soup", show_diagram=False)
+    results = main(obj_name="meat", show_diagram=False)
     cnt_success += results
 
 print(f"# of successful grasp = {cnt_success}")
