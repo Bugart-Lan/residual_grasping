@@ -22,10 +22,9 @@ from GraspSelector import GraspSelector
 from GraspNPlacePlanner import GraspPlanner
 from drivers import PositionController, GripperPoseToPosition
 
-from utils import AddActuatedFloatingSphere
+from utils import AddActuatedFloatingSphere, _ConfigureParser
 
 from manipulation.scenarios import AddRgbdSensors
-from manipulation.utils import ConfigureParser
 
 
 OBJECTS = {
@@ -56,6 +55,8 @@ CAMERA_INSTANCE_PREFIX = "camera"
 
 env_directive = "file://" + os.getcwd() + "/models/env.dmd.yaml"
 scene_directive = "file://" + os.getcwd() + "/models/full.dmd.yaml"
+scene_directive = "package://models/full.dmd.yaml"
+
 
 meshcat = StartMeshcat()
 
@@ -66,7 +67,7 @@ def load_scenario(directive, obj_name="sugar", rng=None):
     plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
     parser = Parser(plant)
     # ConfigureParser allows us to use the object files from manipulation package
-    ConfigureParser(parser)
+    _ConfigureParser(parser, include_manipulation=True)
 
     # Load object in random pose
     parser.AddModelsFromUrl(OBJECTS[obj_name]["url"])
@@ -232,7 +233,7 @@ N = 1
 cnt_success = 0
 for i in range(N):
     print(f"Running {i}-th test...")
-    results = main(obj_name="meat", show_diagram=True)
+    results = main(obj_name="soup", show_diagram=False)
     cnt_success += results
 
 print(f"# of successful grasp = {cnt_success}")

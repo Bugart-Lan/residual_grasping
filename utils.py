@@ -1,4 +1,5 @@
 import numpy as np
+import os
 
 from pydrake.geometry import (
     AddCompliantHydroelasticProperties,
@@ -9,6 +10,7 @@ from pydrake.geometry import (
     StartMeshcat,
 )
 from pydrake.math import RigidTransform
+from pydrake.multibody.parsing import Parser
 from pydrake.multibody.plant import AddMultibodyPlantSceneGraph, CoulombFriction
 from pydrake.multibody.tree import (
     PrismaticJoint,
@@ -98,6 +100,14 @@ def AddActuatedFloatingSphere(plant, mass=1000.0):
     plant.WeldFrames(curr_frame, plant.GetFrameByName("sphere"))
 
     return sphere
+
+def _ConfigureParser(parser: Parser, include_manipulation=False):
+    package_map = parser.package_map()
+    package_xml = os.path.join(os.path.dirname(__file__), "models/package.xml")
+    package_map.AddPackageXml(filename=package_xml)
+    if include_manipulation:
+        from manipulation.utils import ConfigureParser
+        ConfigureParser(parser)
 
 
 if __name__ == "__main__":

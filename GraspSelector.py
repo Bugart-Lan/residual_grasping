@@ -9,10 +9,10 @@ from pydrake.multibody.parsing import Parser
 from pydrake.perception import Concatenate, PointCloud
 from pydrake.systems.framework import DiagramBuilder, LeafSystem
 
-from manipulation.utils import ConfigureParser
+from utils import _ConfigureParser
 
 
-internal_directive = "file://" + os.getcwd() + "/models/internal.dmd.yaml"
+internal_directive = "package://models/full.dmd.yaml"
 
 
 def GraspCandidateCost(
@@ -214,12 +214,11 @@ def make_internal_model(meshcat=None):
     builder = DiagramBuilder()
     plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
     parser = Parser(plant)
-    ConfigureParser(parser)
+    _ConfigureParser(parser, include_manipulation=True)
     parser.AddModelsFromUrl(internal_directive)
     plant.Finalize()
 
     if meshcat:
-        # print("Showing internal model...")
         MeshcatVisualizer.AddToBuilder(
             builder, scene_graph, meshcat, MeshcatVisualizerParams(prefix="internal")
         )

@@ -81,13 +81,14 @@ def main():
         )
 
     if args.test:
-        model = PPO(config["policy_type"], env, n_steps=4, n_epochs=2, batch_size=8)
+        model = PPO(config["policy_type"], env, n_steps=4, n_epochs=2, batch_size=8, device="cpu")
     elif os.path.exists(zip):
         model = PPO.load(
             zip,
             env,
             verbose=1,
             tensorboard_log=args.log_path or f"runs/{run.id}",
+            device="cpu"
         )
     else:
         model = PPO(
@@ -95,6 +96,7 @@ def main():
             env,
             verbose=1,
             tensorboard_log=args.log_path or f"runs/{run.id}",
+            device="cpu",
         )
 
     new_log = True
