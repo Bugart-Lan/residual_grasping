@@ -1,22 +1,29 @@
 import gymnasium as gym
 import numpy as np
 
+from pydrake.common.value import AbstractValue
 from pydrake.geometry import MeshcatVisualizer
 from pydrake.gym import DrakeGymEnv
+from pydrake.multibody.parsing import Parser
 from pydrake.multibody.plant import (
     AddMultibodyPlant,
     MultibodyPlant,
     MultibodyPlantConfig,
 )
 from pydrake.multibody.tree import ModelInstanceIndex
+from pydrake.perception import PointCloud
 from pydrake.systems.analysis import Simulator
 from pydrake.systems.drawing import plot_graphviz
 from pydrake.systems.framework import DiagramBuilder, EventStatus, LeafSystem
 from pydrake.systems.primitives import ConstantVectorSource, Multiplexer, PassThrough
+from pydrake.systems.sensors import Image, ImageRgba8U
 from pydrake.visualization import AddFrameTriadIllustration
+from manipulation.scenarios import AddRgbdSensors
+from manipulation.utils import ConfigureParser
 
 from drivers import PositionController
 from utils import AddActuatedFloatingSphere
+
 
 # Gym parameters.
 sim_time_step = 0.01
@@ -41,8 +48,13 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False, mass=1):
         discrete_contact_approximation=contact_approximation,
     )
     plant, scene_graph = AddMultibodyPlant(multibody_plant_config, builder)
+    parser = Parser(plant)
+    ConfigureParser(parser)
+    camera = parser.AddModelsFromUrl("package://manipulation/camera_box.sdf")[0]
+    plant.WeldFrames(plant.GetFrameByName("world"), plant.GetFrameByName("base"))
     AddActuatedFloatingSphere(plant, mass=mass)
     plant.Finalize()
+    AddRgbdSensors(builder, plant, scene_graph, model_instance_prefix="camera")
     AddFrameTriadIllustration(
         scene_graph=scene_graph, frame=plant.GetFrameByName("sphere")
     )
@@ -99,17 +111,27 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False, mass=1):
             LeafSystem.__init__(self)
             self.ns = plant.num_multibody_states()
             self.DeclareVectorInputPort("plant_states", self.ns)
-            self.DeclareVectorOutputPort("observations", self.ns, self.CalcObs)
+            self.DeclareAbstractInputPort(
+                "point_cloud", AbstractValue.Make(ImageRgba8U())
+            )
+            self.DeclareAbstractOutputPort(
+                "observations", lambda: AbstractValue.Make(ImageRgba8U()), self.CalcObs
+            )
+            # self.DeclareVectorOutputPort("observations", self.ns, self.CalcObs)
             self.noise = noise
 
         def CalcObs(self, context, output):
             plant_state = self.get_input_port(0).Eval(context)
+            cloud = self.get_input_port(1).Eval(context)
             if self.noise:
                 plant_state += np.random.uniform(low=-0.01, high=0.01, size=self.ns)
-            output.set_value(plant_state)
+            output.set_value(cloud)
+            # output.set_value(plant_state)
 
+    sensor = builder.GetSubsystemByName("camera_box")
     obs_pub = builder.AddSystem(ObservationPublisher(noise=obs_noise))
     builder.Connect(plant.get_state_output_port(), obs_pub.get_input_port(0))
+    builder.Connect(sensor.get_output_port(0), obs_pub.get_input_port(1))
     builder.ExportOutput(obs_pub.get_output_port(), "observations")
 
     class RewardSystem(LeafSystem):
@@ -141,6 +163,13 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False, mass=1):
         return EventStatus.Succeeded()
 
     simulator.set_monitor(monitor)
+
+    if debug:
+        import pydot
+
+        pydot.graph_from_dot_data(diagram.GetGraphvizString(max_depth=2))[0].write_png(
+            "images/FloatingJoint-v0-diagram.png"
+        )
 
     return simulator
 

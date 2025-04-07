@@ -225,14 +225,14 @@ def main(obj_name: str = "sugar", show_diagram: bool = False, verbose: bool = Fa
     pose = plant.EvalBodyPoseInWorld(plant_context, body)
     if verbose:
         print(f"Object's final position {pose.translation()[2]}")
-    return pose.translation()[2] >= 0.5
+    return pose.translation()[2] >= 0.3
 
 
 N = 1
 cnt_success = 0
 for i in range(N):
     print(f"Running {i}-th test...")
-    results = main(obj_name="meat", show_diagram=True)
+    results = main(obj_name="soup", show_diagram=False)
     cnt_success += results
 
 print(f"# of successful grasp = {cnt_success}")

@@ -2,7 +2,7 @@ directives:
 
 - add_model:
     name: floor
-    file: file:///Users/bugart/ut/research/tutorials/sdf/floor.sdf
+    file: file:///Users/bugart/ut/research/residual/models/floor.sdf
 
 - add_weld:
     parent: world
