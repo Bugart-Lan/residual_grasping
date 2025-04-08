@@ -2,10 +2,8 @@ import numpy as np
 
 from pydrake.all import (
     AddMultibodyPlantSceneGraph,
-    ConstantVectorSource,
     DiagramBuilder,
     MeshcatVisualizer,
-    MultibodyPlant,
     PiecewisePolynomial,
     Simulator,
     StartMeshcat,

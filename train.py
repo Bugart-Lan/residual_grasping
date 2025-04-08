@@ -17,6 +17,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv
 from wandb.integration.sb3 import WandbCallback
 
 import envs.floating_joint
+import envs.grasp
 
 # import manipulation.envs.box_flipup
 
@@ -51,7 +52,7 @@ def main():
     else:
         run = wandb.init(mode="disabled")
 
-    zip = "data/floating_joint.zip"
+    zip = "data/grasp.zip"
 
     num_cpu = int(cpu_count() / 2)
     if args.train_single_env:
@@ -82,7 +83,14 @@ def main():
 
     if args.test:
         print("Testing mode")
-        model = PPO(config["policy_type"], env, n_steps=4, n_epochs=2, batch_size=8, device="cpu")
+        model = PPO(
+            config["policy_type"],
+            env,
+            n_steps=4,
+            n_epochs=2,
+            batch_size=4 * num_cpu,
+            device="cpu",
+        )
     elif os.path.exists(zip):
         print(f"Loading model @ {zip}")
         model = PPO.load(
@@ -90,7 +98,7 @@ def main():
             env,
             verbose=1,
             tensorboard_log=args.log_path or f"runs/{run.id}",
-            device="cpu"
+            device="cpu",
         )
     else:
         print("Creating PPO model...")

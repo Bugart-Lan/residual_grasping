@@ -2,6 +2,7 @@ import gymnasium as gym
 import numpy as np
 import os
 
+from pydrake.common.value import AbstractValue
 from pydrake.geometry import MeshcatVisualizer
 from pydrake.gym import DrakeGymEnv
 from pydrake.math import RigidTransform, RotationMatrix
@@ -15,11 +16,11 @@ from pydrake.multibody.tree import ModelInstanceIndex
 from pydrake.systems.analysis import Simulator
 from pydrake.systems.drawing import plot_graphviz
 from pydrake.systems.framework import DiagramBuilder, EventStatus, LeafSystem
-from manipulation.utils import ConfigureParser
+from pydrake.systems.sensors import ImageRgba8U
 
 
 from drivers import PositionController
-from utils import AddActuatedFloatingSphere
+from utils import AddActuatedFloatingSphere, _ConfigureParser
 
 # Gym parameters.
 sim_time_step = 0.01
@@ -37,7 +38,7 @@ gym.envs.register(id="Grasp-v0", entry_point=("envs.grasp:DrakeGraspEnv"))
 def make_scene(plant=None, builder=None):
     url = "file://" + os.getcwd() + "/models/full.dmd.yaml"
     parser = Parser(builder=builder, plant=plant)
-    ConfigureParser(parser)
+    _ConfigureParser(parser, include_manipulation=True)
     parser.AddModelsFromUrl(url)
 
 
@@ -51,11 +52,11 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
     plant, scene_graph = AddMultibodyPlant(multibody_plant_config, builder)
     make_scene(builder=builder)
     AddActuatedFloatingSphere(plant)
-    # plant.WeldFrames(
-    #     plant.GetFrameByName("sphere"),
-    #     plant.GetFrameByName("body"),
-    #     X_FM=RigidTransform(RotationMatrix.MakeXRotation(-np.pi / 2), [0, 0, -0.1]),
-    # )
+    plant.WeldFrames(
+        plant.GetFrameByName("sphere"),
+        plant.GetFrameByName("body"),
+        X_FM=RigidTransform(RotationMatrix.MakeXRotation(-np.pi / 2), [0, 0, -0.1]),
+    )
     plant.Finalize()
 
     # Controller plant
@@ -119,6 +120,12 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
             LeafSystem.__init__(self)
             self.ns = plant.num_multibody_states()
             self.DeclareVectorInputPort("plant_states", self.ns)
+            self.DeclareAbstractInputPort(
+                "point_cloud", AbstractValue.Make(ImageRgba8U())
+            )
+            self.DeclareAbstractOutputPort(
+                "observations", lambda: AbstractValue.Make(ImageRgba8U()), self.CalcObs
+            )
             self.DeclareVectorOutputPort("observations", self.ns, self.CalcObs)
             self.noise = noise
 
@@ -128,8 +135,10 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
                 plant_state += np.random.uniform(low=-0.01, high=0.01, size=self.ns)
             output.set_value(plant_state)
 
+    sensor = builder.GetSubsystemByName("camera_box")
     obs_pub = builder.AddSystem(ObservationPublisher(noise=obs_noise))
     builder.Connect(plant.get_state_output_port(), obs_pub.get_input_port(0))
+    builder.Connect(sensor.get_output_port(0), obs_pub.get_input_port(1))
     builder.ExportOutput(obs_pub.get_output_port(), "observations")
 
     class RewardSystem(LeafSystem):
