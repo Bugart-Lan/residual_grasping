@@ -54,6 +54,7 @@ OBJECTS = {
         "url": "package://manipulation/hydro/010_potted_meat_can.sdf",
     },
 }
+height_threshold = 0.3 # z-coord higher than this threshold is considered as a success
 
 # Camera parameters
 width = 640
@@ -215,8 +216,8 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
     class ObservationPublisher(LeafSystem):
         def __init__(self, noise=False):
             LeafSystem.__init__(self)
-            self.ns = plant.num_multibody_states()
-            self.DeclareVectorInputPort("plant_states", self.ns)
+            self.DeclareVectorInputPort("sphere_state", 12)
+            self.DeclareVectorInputPort("wsg_state", 4)
             self.DeclareAbstractInputPort("image0", AbstractValue.Make(ImageRgba8U()))
             self.DeclareAbstractInputPort("image1", AbstractValue.Make(ImageRgba8U()))
             self.DeclareAbstractInputPort("image2", AbstractValue.Make(ImageRgba8U()))
@@ -225,7 +226,7 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
                 "observations",
                 lambda: AbstractValue.Make(
                     {
-                        "state": np.zeros(self.ns),
+                        "state": np.zeros(16),
                         "image0": np.zeros((width, height, 4)),
                         "image1": np.zeros((width, height, 4)),
                         "image2": np.zeros((width, height, 4)),
@@ -236,20 +237,22 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
             self.noise = noise
 
         def CalcObs(self, context, output):
-            plant_state = self.get_input_port(0).Eval(context)
-            image0 = self.get_input_port(1).Eval(context)
-            image1 = self.get_input_port(2).Eval(context)
-            image2 = self.get_input_port(3).Eval(context)
+            sphere_state = self.get_input_port(0).Eval(context)
+            wsg_state = self.get_input_port(1).Eval(context)
+            image0 = self.get_input_port(2).Eval(context)
+            image1 = self.get_input_port(3).Eval(context)
+            image2 = self.get_input_port(4).Eval(context)
 
             if self.noise:
-                plant_state += np.random.uniform(low=-0.01, high=0.01, size=self.ns)
+                sphere_state += np.random.uniform(low=-0.01, high=0.01, size=sphere_state.shape)
+                wsg_state += np.random.uniform(low=-0.01, high=0.01, size=wsg_state.shape)
                 image0 += np.random.uniform(low=-0.01, high=0.01, size=image0.shape)
                 image1 += np.random.uniform(low=-0.01, high=0.01, size=image1.shape)
                 image2 += np.random.uniform(low=-0.01, high=0.01, size=image2.shape)
 
             output.set_value(
                 {
-                    "state": plant_state,
+                    "state": np.concatenate([sphere_state, wsg_state]),
                     "image0": image0.data,
                     "image1": image1.data,
                     "image2": image2.data,
@@ -257,13 +260,13 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
             )
 
     obs_pub = builder.AddSystem(ObservationPublisher(noise=obs_noise))
-    builder.Connect(plant.get_state_output_port(), obs_pub.get_input_port(0))
-    builder.Connect(camera0.get_output_port(0), obs_pub.get_input_port(1))
-    builder.Connect(camera1.get_output_port(0), obs_pub.get_input_port(2))
-    builder.Connect(camera2.get_output_port(0), obs_pub.get_input_port(3))
+    builder.Connect(plant.get_state_output_port(plant.GetModelInstanceByName("sphere")), obs_pub.get_input_port(0))
+    builder.Connect(plant.get_state_output_port(plant.GetModelInstanceByName("wsg")), obs_pub.get_input_port(1))
+    builder.Connect(camera0.get_output_port(0), obs_pub.get_input_port(2))
+    builder.Connect(camera1.get_output_port(0), obs_pub.get_input_port(3))
+    builder.Connect(camera2.get_output_port(0), obs_pub.get_input_port(4))
     builder.ExportOutput(obs_pub.get_output_port(), "observations")
 
-    # TODO: figure out rewards
     class RewardSystem(LeafSystem):
         def __init__(self):
             LeafSystem.__init__(self)
@@ -272,12 +275,13 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
             self.DeclareVectorOutputPort("reward", 1, self.CalcReward)
 
         def CalcReward(self, context, output):
-            state = self.get_input_port(0).Eval(context)
-            reward = 1
-            output[0] = reward
+            object_state = self.get_input_port(0).Eval(context)
+            gripper_state = self.get_input_port(1).Eval(context)
+            cost = np.linalg.norm(gripper_state[6:9]) + np.linalg.norm(gripper_state[9:])
+            reward = 1 if object_state[2] >= 0.3 else 0
+            output[0] = reward - cost
 
     reward = builder.AddSystem(RewardSystem())
-    print(plant.num_positions(obj))
     builder.Connect(
         plant.get_state_output_port(obj),
         reward.get_input_port(0),
@@ -294,10 +298,18 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
 
     def monitor(context):
         plant_context = plant.GetMyContextFromRoot(context)
-        state = plant.GetOutputPort("state").Eval(plant_context)
+        wsg_state = plant.GetOutputPort("wsg_state").Eval(plant_context)
+        sphere_state = plant.GetOutputPort("sphere_state").Eval(plant_context)
+
+        if wsg_state[0] <= -0.055 or wsg_state[0] >= 0:
+            return EventStatus.ReachedTermination(diagram, "wsg left position exceeds limit")
+        
+        if wsg_state[1] <= 0 or wsg_state[0] >= 0.055:
+            return EventStatus.ReachedTermination(diagram, "wsg right position exceeds limit")
 
         if context.get_time() > time_limit:
             return EventStatus.ReachedTermination(diagram, "time limit")
+        return EventStatus.Succeeded()
 
     simulator.set_monitor(monitor)
 
@@ -313,12 +325,13 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
 
 def reset_handler(simulator, diagram_context, seed):
     np.random.seed(seed)
-    home_positions = []
     diagram = simulator.get_system()
     plant = diagram.GetSubsystemByName("plant")
     plant_context = diagram.GetMutableSubsystemContext(plant, diagram_context)
     sphere = plant.GetModelInstanceByName("sphere")
-    plant.SetPositions(plant_context, sphere, np.array([0, 0, 0.7, 0, 0, 0]))
+    plant.SetPositions(plant_context, sphere, np.random.random(6) * 0.1 + 0.1)
+    wsg = plant.GetModelInstanceByName("wsg")
+    plant.SetPositions(plant_context, wsg, np.array([0, 0]))
 
 
 def info_handler(simulator: Simulator) -> dict:
@@ -338,17 +351,14 @@ def DrakeEndToEndGraspEnv(
     # Define action space
     action_space = gym.spaces.Box(
         low=np.asarray([-1, -1, -1, -1, -1, -1, 0]),
-        high=np.asarray([1, 1, 1, 1, 1, 1, 0.11]),
+        high=np.asarray([1, 1, 1, 1, 1, 1, 0.107]),
         dtype=np.float64,
     )
 
     # Define observation space.
-    low = np.concatenate(
-        (plant.GetPositionLowerLimits(), plant.GetVelocityLowerLimits())
-    )
-    high = np.concatenate(
-        (plant.GetPositionUpperLimits(), plant.GetVelocityUpperLimits())
-    )
+    low = [-1.] * 6 + [-np.inf] * 6 + [-0.055, 0., -np.inf, -np.inf]
+    high = [1.] * 6 + [np.inf] * 6 + [0., 0.055, np.inf, np.inf]
+
 
     observation_space = gym.spaces.Dict(
         {

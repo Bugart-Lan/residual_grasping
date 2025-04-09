@@ -52,7 +52,7 @@ def main():
 
     zip = "data/end_to_end_grasp.zip"
 
-    num_cpu = int(cpu_count() / 2)
+    num_cpu = int(cpu_count() / 4)
     if args.train_single_env:
         meshcat = StartMeshcat()
         env = gym.make(
