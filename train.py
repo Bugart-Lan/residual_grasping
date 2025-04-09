@@ -2,9 +2,6 @@ import argparse
 import os
 import sys
 
-import os
-import sys
-
 import gymnasium as gym
 import wandb
 
@@ -16,8 +13,9 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from wandb.integration.sb3 import WandbCallback
 
-import envs.floating_joint
-import envs.grasp
+
+# import envs.floating_joint
+import envs.end_to_end_grasp
 
 # import manipulation.envs.box_flipup
 
@@ -34,9 +32,9 @@ def main():
     args = parser.parse_args()
 
     config = {
-        "policy_type": "MlpPolicy",
+        "policy_type": "MultiInputPolicy",
         "total_timesteps": 5e5 if not args.test else 5,
-        "env_name": "FloatingJoint-v0",
+        "env_name": "EndToEndGrasp-v0",
         "env_time_limit": 10 if not args.test else 0.5,
         "observations": "state",
     }
@@ -52,7 +50,7 @@ def main():
     else:
         run = wandb.init(mode="disabled")
 
-    zip = "data/grasp.zip"
+    zip = "data/end_to_end_grasp.zip"
 
     num_cpu = int(cpu_count() / 2)
     if args.train_single_env:
@@ -88,7 +86,7 @@ def main():
             env,
             n_steps=4,
             n_epochs=2,
-            batch_size=4 * num_cpu,
+            batch_size=4,
             device="cpu",
         )
     elif os.path.exists(zip):

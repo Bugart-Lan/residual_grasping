@@ -4,6 +4,12 @@ Remember to activate the python virtual environment before running programs.
 ```
 python train.py --log_path runs/{folder name}
 ```
+
+Somehow, vectorized environments with Stable-Baseline3 don't function properly on MacOS, so run
+```
+python train.py --train_single_env --test
+```
+to debug and test for proper implementation.
 ## Visualization with TensorBoard
 ```
 tensorboard --logdir runs

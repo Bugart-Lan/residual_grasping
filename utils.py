@@ -101,12 +101,14 @@ def AddActuatedFloatingSphere(plant, mass=1000.0):
 
     return sphere
 
+
 def _ConfigureParser(parser: Parser, include_manipulation=False):
     package_map = parser.package_map()
     package_xml = os.path.join(os.path.dirname(__file__), "models/package.xml")
     package_map.AddPackageXml(filename=package_xml)
     if include_manipulation:
         from manipulation.utils import ConfigureParser
+
         ConfigureParser(parser)
 
 
