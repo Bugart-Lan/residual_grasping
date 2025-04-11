@@ -266,7 +266,8 @@ class GraspSelector(LeafSystem):
             pcd[i].FlipNormalsTowardPoint(X_WC.translation())
         merged_pcd = Concatenate(pcd)
         down_sampled_pcd = merged_pcd.VoxelizedDownSample(voxel_size=0.005)
-        self._meshcat.SetObject("intenral/cloud", down_sampled_pcd, point_size=0.003)
+        if self._meshcat:
+            self._meshcat.SetObject("intenral/cloud", down_sampled_pcd, point_size=0.003)
 
         costs = []
         X_Gs = []

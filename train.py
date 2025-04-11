@@ -54,7 +54,7 @@ def main():
         run = wandb.init(mode="disabled")
 
     # zip = "data/end_to_end_grasp.zip"
-    zip = "data/residual_grasp"
+    zip = "data/residual_grasp.zip"
 
     num_cpu = int(cpu_count() / 4)
     if args.train_single_env:

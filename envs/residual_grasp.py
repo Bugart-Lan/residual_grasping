@@ -36,22 +36,27 @@ from GraspPlanner import GraspPlanner
 # Objects
 OBJECTS = {
     "sugar": {
+        "name": "004_sugar_box",
         "base": "base_link_sugar",
         "url": "package://manipulation/hydro/004_sugar_box.sdf",
     },
     "soup": {
+        "name": "005_tomato_soup_can",
         "base": "base_link_soup",
         "url": "package://manipulation/hydro/005_tomato_soup_can.sdf",
     },
     "mustard": {
+        "name": "006_mustard_bottle",
         "base": "base_link_mustard",
         "url": "package://manipulation/hydro/006_mustard_bottle.sdf",
     },
     "gelatin": {
+        "name": "009_gelatin_box",
         "base": "base_link_gelatin",
         "url": "package://manipulation/hydro/009_gelatin_box.sdf",
     },
     "meat": {
+        "name": "010_potted_meat_can",
         "base": "base_link_meat",
         "url": "package://manipulation/hydro/010_potted_meat_can.sdf",
     },
@@ -83,12 +88,9 @@ gym.envs.register(
     id="ResidualGrasp-v0", entry_point=("envs.residual_grasp:DrakeResidualGraspEnv")
 )
 
-
-def load_all_objects(plant, parser, active="sugar", rng=None):
-    active_obj = None
+def reset_all_objects(plant, active="sugar", rng=None):
     for key, val in OBJECTS.items():
         if key == active:
-            active_obj = parser.AddModelsFromUrl(val["url"])[0]
             if not rng:
                 rng = np.random.default_rng()
             q = rng.random(size=4)
@@ -101,12 +103,11 @@ def load_all_objects(plant, parser, active="sugar", rng=None):
                 RigidTransform(RotationMatrix(Quaternion(q)), [x, y, z]),
             )
         else:
-            parser.AddModelsFromUrl(val["url"])
             plant.SetDefaultFreeBodyPose(
                 plant.GetBodyByName(val["base"]),
                 RigidTransform([1, 1, 0.1]),
             )
-    return active_obj
+    return plant.GetModelInstanceByName(OBJECTS[active]["name"])
 
 
 def load_scenario(meshcat=None, obj_name="sugar", rng=None):
@@ -128,7 +129,9 @@ def load_scenario(meshcat=None, obj_name="sugar", rng=None):
         plant.GetFrameByName("body"),
         X_FM=RigidTransform(RotationMatrix.MakeXRotation(-np.pi / 2), [0, 0, -0.1]),
     )
-    obj = load_all_objects(plant, parser, active=obj_name)
+    for key, val in OBJECTS.items():
+         parser.AddModelsFromUrl(val["url"])
+    obj = reset_all_objects(plant, active=obj_name, rng=rng)
     plant.Finalize()
     plant.SetDefaultPositions(
         sphere,
@@ -210,7 +213,6 @@ def load_scenario(meshcat=None, obj_name="sugar", rng=None):
 def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
     rng = np.random.default_rng()
     obj_name = list(OBJECTS.keys())[np.random.randint(0, len(OBJECTS))]
-    meshcat.Delete()
 
     builder = DiagramBuilder()
     scenario = builder.AddSystem(
@@ -353,6 +355,7 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
         def CalcReward(self, context, output):
             object_state = self.get_input_port(0).Eval(context)
             gripper_state = self.get_input_port(1).Eval(context)
+            # Penalty for linear velocity and angular velocity
             cost = np.linalg.norm(gripper_state[6:9]) + np.linalg.norm(
                 gripper_state[9:]
             )
@@ -379,7 +382,7 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
         obj_state = scenario.GetOutputPort("object_state").Eval(scenario_context)
 
         if obj_state[2] < 0:
-            print("object falls below 0")
+            # print("object falls below 0")
             return EventStatus.ReachedTermination(diagram, "object falls below 0")
         if context.get_time() > time_limit:
             return EventStatus.ReachedTermination(diagram, "time limit")
@@ -398,7 +401,7 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
 
 
 def reset_handler(simulator, diagram_context, seed):
-    np.random.seed(seed)
+    rng = np.random.default_rng(seed=seed)
     diagram = simulator.get_system()
     env = diagram.GetSubsystemByName("env")
     env_context = diagram.GetSubsystemContext(env, diagram_context)
@@ -410,14 +413,15 @@ def reset_handler(simulator, diagram_context, seed):
         sphere,
         np.concatenate(
             [
-                np.random.random(2) * 0.1 - 0.2,
-                np.random.random(1) * 0.3 + 0.5,
+                rng.random(2) * 0.1 - 0.2,
+                rng.random(1) * 0.3 + 0.5,
                 np.ones(3) * 0,
             ]
         ),
     )
     wsg = plant.GetModelInstanceByName("wsg")
     plant.SetPositions(plant_context, wsg, np.array([0, 0]))
+    reset_all_objects(plant, active=list(OBJECTS.keys())[np.random.randint(0, len(OBJECTS))], rng=rng)
 
 
 def info_handler(simulator: Simulator) -> dict:
@@ -442,8 +446,8 @@ def DrakeResidualGraspEnv(
 
     # Define action space
     action_space = gym.spaces.Box(
-        low=np.asarray([-0.1, -0.1, 0.1, -0.1, -0.1, -0.1, -0.107]) * 0.01,
-        high=np.asarray([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.107]) * 0.01,
+        low=np.asarray([-0.1, -0.1, 0.1, -0.1, -0.1, -0.1, -0.107]) * 0.1,
+        high=np.asarray([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.107]) * 0.1,
         dtype=np.float64,
     )
 

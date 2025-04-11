@@ -124,7 +124,7 @@ class GraspPlanner(LeafSystem):
 
         cost, X_G["pick"] = self.get_input_port(self._grasp_index).Eval(context)
         # TODO: deal with the case where the selector could not find a valid grasp
-        assert not np.isinf(cost), "Could not find a valid grasp."
+        # assert not np.isinf(cost), "Could not find a valid grasp."
         state.get_mutable_abstract_state(int(self._mode_index)).set_value(
             PlannerState.PICK
         )
