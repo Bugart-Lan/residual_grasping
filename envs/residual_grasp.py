@@ -75,8 +75,8 @@ image_size = width * height * 4
 CAMERA_INSTANCE_PREFIX = "camera"
 
 # Gym parameters
-sim_time_step = 0.001
-gym_time_step = 0.05
+sim_time_step = 0.01
+gym_time_step = 0.1
 controller_time_step = 0.01
 gym_time_limit = 5
 drake_contact_models = ["point", "hydroelastic_with_fallback"]
@@ -359,6 +359,7 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
             cost = np.linalg.norm(gripper_state[6:9]) + np.linalg.norm(
                 gripper_state[9:]
             )
+            # TODO: add penalty for gripper movement and log cost to see if it is proportional
             reward = 5 if object_state[2] >= 0.3 else 0
             output[0] = reward - cost
 
