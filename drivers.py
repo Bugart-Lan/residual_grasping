@@ -20,7 +20,8 @@ pid_coeffs = {
         "kp": np.array([2000, 1500, 1500, 1500, 1500, 500, 500]),
     },
     "point": {
-        "kp": 100 * np.ones((6, 1)),
+        "kp": 10 * np.ones((6, 1)),
+        "limit": 1000,
     },
 }
 pid_coeffs["iiwa"]["kd"] = 2 * np.sqrt(pid_coeffs["iiwa"]["kp"])

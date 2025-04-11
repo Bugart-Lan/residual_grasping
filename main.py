@@ -19,7 +19,7 @@ from pydrake.all import (
 )
 
 from GraspSelector import GraspSelector
-from GraspNPlacePlanner import GraspPlanner
+from GraspPlanner import GraspPlanner
 from drivers import PositionController, GripperPoseToPosition
 
 from utils import AddActuatedFloatingSphere, _ConfigureParser
@@ -88,7 +88,7 @@ def load_scenario(directive, obj_name="sugar", rng=None):
     # Load directive
     parser.AddModelsFromUrl(directive)
     # Add a floating joint and weld it to the wsg gripper
-    AddActuatedFloatingSphere(plant)
+    sphere = AddActuatedFloatingSphere(plant)
     plant.WeldFrames(
         plant.GetFrameByName("sphere"),
         plant.GetFrameByName("body"),
@@ -156,8 +156,18 @@ def main(obj_name: str = "sugar", show_diagram: bool = False, verbose: bool = Fa
     plant = scenario.GetSubsystemByName("plant")
 
     # Set initial position of the floating joint
+    # TODO: debug the case where the gripper has initial rotation
     sphere = plant.GetModelInstanceByName("sphere")
-    plant.SetDefaultPositions(sphere, np.array([0, 0, 0.7, 0, 0, 0]))
+    plant.SetDefaultPositions(
+        sphere,
+        np.concatenate(
+            [
+                np.random.random(2) * 0.1 - 0.2,
+                np.random.random(1) * 0.3 + 0.5,
+                np.ones(3) * 0,
+            ]
+        ),
+    )
 
     grasp_selector = builder.AddSystem(
         GraspSelector(

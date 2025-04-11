@@ -15,7 +15,8 @@ from wandb.integration.sb3 import WandbCallback
 
 
 # import envs.floating_joint
-import envs.end_to_end_grasp
+# import envs.end_to_end_grasp
+import envs.residual_grasp
 
 # import manipulation.envs.box_flipup
 
@@ -33,8 +34,10 @@ def main():
 
     config = {
         "policy_type": "MultiInputPolicy",
-        "total_timesteps": 5e5 if not args.test else 5,
-        "env_name": "EndToEndGrasp-v0",
+        "total_timesteps": 10 if not args.test else 5,
+        "env_name": "ResidualGrasp-v0",
+        # "env_name": "EndToEndGrasp-v0",
+        # "env_name": "FloatingJoint-v0",
         "env_time_limit": 10 if not args.test else 0.5,
         "observations": "state",
     }
@@ -50,7 +53,8 @@ def main():
     else:
         run = wandb.init(mode="disabled")
 
-    zip = "data/end_to_end_grasp.zip"
+    # zip = "data/end_to_end_grasp.zip"
+    zip = "data/residual_grasp"
 
     num_cpu = int(cpu_count() / 4)
     if args.train_single_env:

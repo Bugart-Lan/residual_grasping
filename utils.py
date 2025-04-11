@@ -91,8 +91,8 @@ def AddActuatedFloatingSphere(plant, mass=1000.0):
                 curr_frame,
                 rigidbody.body_frame(),
                 fingers[i]["axis"],
-                -1,
-                1,
+                -1 if i < 3 else -np.inf,
+                1 if i < 3 else np.inf,
             )
         )
         plant.AddJointActuator(fingers[i]["name"], finger_i)

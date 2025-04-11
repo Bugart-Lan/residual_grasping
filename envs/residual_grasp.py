@@ -19,17 +19,19 @@ from pydrake.multibody.plant import (
     MultibodyPlant,
     MultibodyPlantConfig,
 )
-from pydrake.multibody.tree import ModelInstanceIndex
 from pydrake.systems.analysis import Simulator
 from pydrake.systems.drawing import plot_graphviz
 from pydrake.systems.framework import DiagramBuilder, EventStatus, LeafSystem
 from pydrake.systems.sensors import CameraInfo, ImageRgba8U
-from pydrake.systems.primitives import Demultiplexer, LogVectorOutput, VectorLogSink
+from pydrake.systems.primitives import Adder, Demultiplexer, Saturation
+from pydrake.visualization import AddFrameTriadIllustration
 from manipulation.scenarios import AddRgbdSensors
 
 
-from drivers import PositionController
+from drivers import GripperPoseToPosition, PositionController
 from utils import AddActuatedFloatingSphere, _ConfigureParser
+from GraspSelector import GraspSelector
+from GraspPlanner import GraspPlanner
 
 # Objects
 OBJECTS = {
@@ -65,6 +67,7 @@ near = 0.1
 far = 10.0
 renderer = "my_renderer"
 image_size = width * height * 4
+CAMERA_INSTANCE_PREFIX = "camera"
 
 # Gym parameters
 sim_time_step = 0.001
@@ -77,21 +80,37 @@ drake_contact_approximations = ["sap", "tamsi", "similar", "lagged"]
 contact_approximation = drake_contact_approximations[0]
 
 gym.envs.register(
-    id="EndToEndGrasp-v0", entry_point=("envs.end_to_end_grasp:DrakeEndToEndGraspEnv")
+    id="ResidualGrasp-v0", entry_point=("envs.residual_grasp:DrakeResidualGraspEnv")
 )
 
 
-def make_scene(plant=None, builder=None, obj_name="sugar"):
-    parser = Parser(builder=builder, plant=plant)
-    _ConfigureParser(parser, include_manipulation=True)
-    parser.AddModelsFromUrl("package://models/full.dmd.yaml")
-    return parser.AddModelsFromUrl(OBJECTS[obj_name]["url"])[0]
+def load_all_objects(plant, parser, active="sugar", rng=None):
+    active_obj = None
+    for key, val in OBJECTS.items():
+        if key == active:
+            active_obj = parser.AddModelsFromUrl(val["url"])[0]
+            if not rng:
+                rng = np.random.default_rng()
+            q = rng.random(size=4)
+            q /= np.linalg.norm(q)
+            x = rng.random() * 0.1 - 0.05
+            y = rng.random() * 0.1 - 0.05
+            z = rng.random() * 0.2 + 0.1
+            plant.SetDefaultFreeBodyPose(
+                plant.GetBodyByName(val["base"]),
+                RigidTransform(RotationMatrix(Quaternion(q)), [x, y, z]),
+            )
+        else:
+            parser.AddModelsFromUrl(val["url"])
+            plant.SetDefaultFreeBodyPose(
+                plant.GetBodyByName(val["base"]),
+                RigidTransform([1, 1, 0.1]),
+            )
+    return active_obj
 
 
-def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
-    # TODO: randomize objects
-    obj_name = "sugar"
-
+def load_scenario(meshcat=None, obj_name="sugar", rng=None):
+    # Create a new diagram
     builder = DiagramBuilder()
     multibody_plant_config = MultibodyPlantConfig(
         time_step=sim_time_step,
@@ -99,29 +118,28 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
         discrete_contact_approximation=contact_approximation,
     )
     plant, scene_graph = AddMultibodyPlant(multibody_plant_config, builder)
-    obj = make_scene(builder=builder, obj_name=obj_name)
+    parser = Parser(plant)
+    _ConfigureParser(parser, include_manipulation=True)
+    parser.AddModelsFromUrl("package://models/full.dmd.yaml")
+    # Add a floating joint and weld it to the wsg gripper
     sphere = AddActuatedFloatingSphere(plant)
     plant.WeldFrames(
         plant.GetFrameByName("sphere"),
         plant.GetFrameByName("body"),
         X_FM=RigidTransform(RotationMatrix.MakeXRotation(-np.pi / 2), [0, 0, -0.1]),
     )
-
-    # Randomize object pose
-    rng = np.random.default_rng()
-    q = rng.random(size=4)
-    q /= np.linalg.norm(q)
-    x = rng.random() * 0.1 - 0.05
-    y = rng.random() * 0.1 - 0.05
-    z = rng.random() * 0.2 + 0.2
-    plant.SetDefaultFreeBodyPose(
-        plant.GetBodyByName(OBJECTS[obj_name]["base"]),
-        RigidTransform(RotationMatrix(Quaternion(q)), [x, y, z]),
-    )
+    obj = load_all_objects(plant, parser, active=obj_name)
     plant.Finalize()
-
-    plant.SetDefaultPositions(sphere, np.array([0, 0, 0.7, 0, 0, 0]))
-
+    plant.SetDefaultPositions(
+        sphere,
+        np.concatenate(
+            [
+                np.random.random(2) * 0.1 - 0.2,
+                np.random.random(1) * 0.3 + 0.5,
+                np.ones(3) * 0,
+            ]
+        ),
+    )
     # Add cameras
     depth_camera = DepthRenderCamera(
         RenderCameraCore(
@@ -136,61 +154,25 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
         builder,
         plant,
         scene_graph,
-        also_add_point_clouds=False,
+        also_add_point_clouds=True,
         model_instance_prefix="camera",
         depth_camera=depth_camera,
         renderer=renderer,
     )
-    camera0 = builder.GetSubsystemByName("camera0")
-    camera1 = builder.GetSubsystemByName("camera1")
-    camera2 = builder.GetSubsystemByName("camera2")
 
-    # Controller plant
-    controller_plant = MultibodyPlant(time_step=controller_time_step)
+    # Create a plant that contains only the floating sphere (joint)
+    controller_plant = MultibodyPlant(0)
     AddActuatedFloatingSphere(controller_plant)
     controller_plant.Finalize()
     controller_plant.set_name("controller_plant")
 
     if meshcat:
         MeshcatVisualizer.AddToBuilder(builder, scene_graph, meshcat)
-
-    # Extract the controller plant information.
-    ns = controller_plant.num_multibody_states()
-    nv = controller_plant.num_velocities()
-    na = controller_plant.num_actuators()
-    nj = controller_plant.num_joints()
-    npos = controller_plant.num_positions()
-
-    if debug:
-        for i in range(plant.num_model_instances()):
-            print(
-                f"Model Instance {i}: {plant.GetModelInstanceName(ModelInstanceIndex(i))}"
-            )
-
-        print(
-            f"\nNumber of position: {npos},",
-            f"Number of velocities: {nv},",
-            f"Number of actuators: {na},",
-            f"Number of joints: {nj},",
-            f"Number of multibody states: {ns}",
+        AddFrameTriadIllustration(
+            scene_graph=scene_graph, frame=plant.GetFrameByName("body")
         )
 
-        # Visualize the plant.
-        import matplotlib.pyplot as plt
-
-        plt.figure()
-        plot_graphviz(plant.GetTopologyGraphvizString())
-        plt.plot(1)
-        plt.show(block=False)
-
-    # Define actions = [sphere_positions, gripper_state] = [(6,), (1,)]
-    demux = builder.AddSystem(Demultiplexer([6, 1]))
-    builder.ExportInput(demux.get_input_port(0), "actions")
-
-    # Using positions as the action space
-    controller = builder.AddSystem(
-        PositionController(controller_plant=controller_plant, robot="point")
-    )
+    controller = builder.AddSystem(PositionController(controller_plant, "point"))
     builder.Connect(
         controller.GetOutputPort("actuation"),
         plant.GetInputPort("sphere_actuation"),
@@ -203,7 +185,7 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
         plant.GetOutputPort("sphere_state"),
         controller.GetInputPort("state"),
     )
-    builder.Connect(demux.get_output_port(0), controller.GetInputPort("position"))
+    builder.ExportInput(controller.GetInputPort("position"), "position")
 
     # Add controller for the wsg gripper
     wsg_driver = builder.AddSystem(SchunkWsgPositionController())
@@ -212,9 +194,84 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
         plant.GetInputPort("wsg_actuation"),
     )
     builder.Connect(plant.GetOutputPort("wsg_state"), wsg_driver.GetInputPort("state"))
-    builder.Connect(
-        demux.get_output_port(1), wsg_driver.GetInputPort("desired_position")
+    builder.ExportInput(wsg_driver.GetInputPort("desired_position"), "command")
+
+    builder.ExportOutput(plant.GetOutputPort("body_poses"), "body_poses")
+    builder.ExportOutput(plant.GetOutputPort("wsg_state"), "wsg_state")
+    builder.ExportOutput(plant.GetOutputPort("sphere_state"), "sphere_state")
+    builder.ExportOutput(plant.get_state_output_port(obj), "object_state")
+
+    diagram = builder.Build()
+    diagram.set_name("env")
+
+    return diagram
+
+
+def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
+    rng = np.random.default_rng()
+    obj_name = list(OBJECTS.keys())[np.random.randint(0, len(OBJECTS))]
+    meshcat.Delete()
+
+    builder = DiagramBuilder()
+    scenario = builder.AddSystem(
+        load_scenario(meshcat=meshcat, obj_name=obj_name, rng=rng)
     )
+    plant = scenario.GetSubsystemByName("plant")
+    grasp_selector = builder.AddSystem(
+        GraspSelector(
+            [
+                plant.GetBodyIndices(plant.GetModelInstanceByName("camera0"))[0],
+                plant.GetBodyIndices(plant.GetModelInstanceByName("camera1"))[0],
+                plant.GetBodyIndices(plant.GetModelInstanceByName("camera2"))[0],
+            ],
+            meshcat=meshcat,
+        )
+    )
+    builder.Connect(
+        scenario.GetOutputPort("camera0_point_cloud"),
+        grasp_selector.GetInputPort("cloud0_W"),
+    )
+    builder.Connect(
+        scenario.GetOutputPort("camera1_point_cloud"),
+        grasp_selector.GetInputPort("cloud1_W"),
+    )
+    builder.Connect(
+        scenario.GetOutputPort("camera2_point_cloud"),
+        grasp_selector.GetInputPort("cloud2_W"),
+    )
+    builder.Connect(
+        scenario.GetOutputPort("body_poses"), grasp_selector.GetInputPort("body_poses")
+    )
+
+    planner = builder.AddSystem(GraspPlanner(plant))
+    transformer = builder.AddSystem(
+        GripperPoseToPosition(
+            X_GB=RigidTransform(
+                RotationMatrix.MakeXRotation(-np.pi / 2), [0, 0, -0.1]
+            ).inverse()
+        )
+    )
+    builder.Connect(
+        grasp_selector.GetOutputPort("grasp_selection"), planner.GetInputPort("grasp")
+    )
+    builder.Connect(
+        scenario.GetOutputPort("body_poses"), planner.GetInputPort("body_poses")
+    )
+    builder.Connect(planner.GetOutputPort("X_WG"), transformer.get_input_port(0))
+
+    # Actions from RL agent
+    demux = builder.AddSystem(Demultiplexer([6, 1]))
+    builder.ExportInput(demux.get_input_port(0), "actions")
+    adder = builder.AddSystem(Adder(2, 6))
+    builder.Connect(demux.get_output_port(0), adder.get_input_port(0))
+    builder.Connect(transformer.get_output_port(0), adder.get_input_port(1))
+    builder.Connect(adder.get_output_port(0), scenario.GetInputPort("position"))
+    adder = builder.AddSystem(Adder(2, 1))
+    builder.Connect(demux.get_output_port(1), adder.get_input_port(0))
+    builder.Connect(planner.GetOutputPort("wsg_position"), adder.get_input_port(1))
+    sat = builder.AddSystem(Saturation(np.array([0]), np.array([0.107])))
+    builder.Connect(adder.get_output_port(0), sat.get_input_port(0))
+    builder.Connect(sat.get_output_port(0), scenario.GetInputPort("command"))
 
     class ObservationPublisher(LeafSystem):
         def __init__(self, noise=False):
@@ -268,16 +325,22 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
 
     obs_pub = builder.AddSystem(ObservationPublisher(noise=obs_noise))
     builder.Connect(
-        plant.get_state_output_port(plant.GetModelInstanceByName("sphere")),
+        scenario.GetOutputPort("sphere_state"),
         obs_pub.get_input_port(0),
     )
     builder.Connect(
-        plant.get_state_output_port(plant.GetModelInstanceByName("wsg")),
+        scenario.GetOutputPort("wsg_state"),
         obs_pub.get_input_port(1),
     )
-    builder.Connect(camera0.get_output_port(0), obs_pub.get_input_port(2))
-    builder.Connect(camera1.get_output_port(0), obs_pub.get_input_port(3))
-    builder.Connect(camera2.get_output_port(0), obs_pub.get_input_port(4))
+    builder.Connect(
+        scenario.GetOutputPort("camera0_rgb_image"), obs_pub.get_input_port(2)
+    )
+    builder.Connect(
+        scenario.GetOutputPort("camera1_rgb_image"), obs_pub.get_input_port(3)
+    )
+    builder.Connect(
+        scenario.GetOutputPort("camera1_rgb_image"), obs_pub.get_input_port(4)
+    )
     builder.ExportOutput(obs_pub.get_output_port(), "observations")
 
     class RewardSystem(LeafSystem):
@@ -293,16 +356,16 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
             cost = np.linalg.norm(gripper_state[6:9]) + np.linalg.norm(
                 gripper_state[9:]
             )
-            reward = 1 if object_state[2] >= 0.3 else 0
+            reward = 5 if object_state[2] >= 0.3 else 0
             output[0] = reward - cost
 
     reward = builder.AddSystem(RewardSystem())
     builder.Connect(
-        plant.get_state_output_port(obj),
+        scenario.GetOutputPort("object_state"),
         reward.get_input_port(0),
     )
     builder.Connect(
-        plant.get_state_output_port(plant.GetModelInstanceByName("sphere")),
+        scenario.GetOutputPort("sphere_state"),
         reward.get_input_port(1),
     )
     builder.ExportOutput(reward.get_output_port(), "reward")
@@ -312,13 +375,10 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
     simulator.Initialize()
 
     def monitor(context):
-        plant_context = plant.GetMyContextFromRoot(context)
-        obj_state = plant.GetOutputPort("004_sugar_box_state").Eval(plant_context)
-        wsg_state = plant.GetOutputPort("wsg_state").Eval(plant_context)
-        sphere_state = plant.GetOutputPort("sphere_state").Eval(plant_context)
-        # print(f"object z-position = {obj_state[2]}")
+        scenario_context = scenario.GetMyContextFromRoot(context)
+        obj_state = scenario.GetOutputPort("object_state").Eval(scenario_context)
 
-        if obj_state[2] < -0.02:
+        if obj_state[2] < 0:
             print("object falls below 0")
             return EventStatus.ReachedTermination(diagram, "object falls below 0")
         if context.get_time() > time_limit:
@@ -331,7 +391,7 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
         import pydot
 
         pydot.graph_from_dot_data(diagram.GetGraphvizString(max_depth=2))[0].write_png(
-            "images/EndToEndGrasp-v0-diagram.png"
+            "images/ResidualGrasp-v0-diagram.png"
         )
 
     return simulator
@@ -340,8 +400,10 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
 def reset_handler(simulator, diagram_context, seed):
     np.random.seed(seed)
     diagram = simulator.get_system()
-    plant = diagram.GetSubsystemByName("plant")
-    plant_context = diagram.GetMutableSubsystemContext(plant, diagram_context)
+    env = diagram.GetSubsystemByName("env")
+    env_context = diagram.GetSubsystemContext(env, diagram_context)
+    plant = env.GetSubsystemByName("plant")
+    plant_context = env.GetMutableSubsystemContext(plant, env_context)
     sphere = plant.GetModelInstanceByName("sphere")
     plant.SetPositions(
         plant_context,
@@ -349,8 +411,8 @@ def reset_handler(simulator, diagram_context, seed):
         np.concatenate(
             [
                 np.random.random(2) * 0.1 - 0.2,
-                np.random.random(1) * 0.3 + 0.1,
-                np.ones(3) * 2 * np.pi,
+                np.random.random(1) * 0.3 + 0.5,
+                np.ones(3) * 0,
             ]
         ),
     )
@@ -364,13 +426,13 @@ def info_handler(simulator: Simulator) -> dict:
     return info
 
 
-def DrakeEndToEndGraspEnv(
+def DrakeResidualGraspEnv(
     meshcat=None, time_limit=gym_time_limit, debug=False, obs_noise=False
 ):
     simulator = make_sim(
         meshcat=meshcat, time_limit=time_limit, debug=debug, obs_noise=obs_noise
     )
-    plant = simulator.get_system().GetSubsystemByName("plant")
+    plant = simulator.get_system().GetSubsystemByName("env").GetSubsystemByName("plant")
     if debug:
         names = plant.GetPositionNames()
         lim_low = plant.GetPositionLowerLimits()
@@ -380,8 +442,8 @@ def DrakeEndToEndGraspEnv(
 
     # Define action space
     action_space = gym.spaces.Box(
-        low=np.asarray([-1, -1, 0.1, -1, -1, -1, 0]) * 0.1,
-        high=np.asarray([1, 1, 1, 1, 1, 1, 0.107]) * 0.2,
+        low=np.asarray([-0.1, -0.1, 0.1, -0.1, -0.1, -0.1, -0.107]) * 0.01,
+        high=np.asarray([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.107]) * 0.01,
         dtype=np.float64,
     )
 
