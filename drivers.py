@@ -119,21 +119,3 @@ class PositionController(Diagram):
         builder.ExportOutput(state_pass_through.get_output_port(), "state_estimated")
 
         builder.BuildInto(self)
-
-
-class PointFingerForceControl(LeafSystem):
-
-    def __init__(self, plant, mass):
-        LeafSystem.__init__(self)
-        self._plant = plant
-        self._mass = mass + plant.GetRigidBodyByName("sphere").default_mass()
-        dof = plant.num_actuated_dofs()
-
-        self.DeclareVectorInputPort("desired_contact_force", dof)
-        self.DeclareVectorOutputPort("finger_actuation", dof, self.CalcOutput)
-
-    def CalcOutput(self, context, output):
-        g = self._plant.gravity_field().gravity_vector()
-        desired_force = self.get_input_port(0).Eval(context)
-        desired_force[:3] -= self._mass * g
-        output.SetFromVector(desired_force)

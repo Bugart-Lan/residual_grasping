@@ -19,7 +19,7 @@ from pydrake.multibody.tree import (
     UnitInertia,
 )
 from pydrake.systems.analysis import Simulator
-from pydrake.systems.framework import DiagramBuilder
+from pydrake.systems.framework import DiagramBuilder, LeafSystem
 
 
 def AddSphere(plant, shape, name, mass=1.0, mu=1.0, color=[0.5, 0.5, 0.9, 1.0]):
@@ -110,6 +110,19 @@ def _ConfigureParser(parser: Parser, include_manipulation=False):
         from manipulation.utils import ConfigureParser
 
         ConfigureParser(parser)
+
+
+class Switch(LeafSystem):
+    def __init__(self, n, m):
+        LeafSystem.__init__(self)
+        self.DeclareVectorInputPort("index", 1)
+        for i in range(n):
+            self.DeclareVectorInputPort(f"state_{i}", m)
+        self.DeclareVectorOutputPort("state", m, self.SelectState)
+
+    def SelectState(self, context, output):
+        index = self.get_input_port(0).Eval(context)
+        output.SetFromVector(self.get_input_port(index + 1).Eval(context))
 
 
 if __name__ == "__main__":

@@ -20,3 +20,5 @@ When running on lab computers, run the following command in the parent folder to
 ```
 source setup.sh
 ```
+
+In Drake, a state vector of a free body is `[rotation (quaternion) translation angular_velocity linear_velocity]`, which has 4+3+3+3=13 dimensions.

@@ -86,7 +86,6 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False, mass=1):
         depth_camera=depth_camera,
         renderer=renderer,
     )
-    # AddRgbdSensors(builder, plant, scene_graph, model_instance_prefix="camera")
     AddFrameTriadIllustration(
         scene_graph=scene_graph, frame=plant.GetFrameByName("sphere")
     )

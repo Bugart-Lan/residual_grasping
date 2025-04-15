@@ -23,39 +23,49 @@ from pydrake.systems.analysis import Simulator
 from pydrake.systems.drawing import plot_graphviz
 from pydrake.systems.framework import DiagramBuilder, EventStatus, LeafSystem
 from pydrake.systems.sensors import CameraInfo, ImageRgba8U
-from pydrake.systems.primitives import Adder, Demultiplexer, Saturation
+from pydrake.systems.primitives import (
+    Adder,
+    ConstantVectorSource,
+    Demultiplexer,
+    Saturation,
+)
 from pydrake.visualization import AddFrameTriadIllustration
 from manipulation.scenarios import AddRgbdSensors
 
 
 from drivers import GripperPoseToPosition, PositionController
-from utils import AddActuatedFloatingSphere, _ConfigureParser
+from utils import AddActuatedFloatingSphere, _ConfigureParser, Switch
 from GraspSelector import GraspSelector
 from GraspPlanner import GraspPlanner
 
 # Objects
 OBJECTS = {
     "sugar": {
+        "id": 0,
         "name": "004_sugar_box",
         "base": "base_link_sugar",
         "url": "package://manipulation/hydro/004_sugar_box.sdf",
     },
     "soup": {
+        "id": 1,
         "name": "005_tomato_soup_can",
         "base": "base_link_soup",
         "url": "package://manipulation/hydro/005_tomato_soup_can.sdf",
     },
     "mustard": {
+        "id": 2,
         "name": "006_mustard_bottle",
         "base": "base_link_mustard",
         "url": "package://manipulation/hydro/006_mustard_bottle.sdf",
     },
     "gelatin": {
+        "id": 3,
         "name": "009_gelatin_box",
         "base": "base_link_gelatin",
         "url": "package://manipulation/hydro/009_gelatin_box.sdf",
     },
     "meat": {
+        "id": 4,
         "name": "010_potted_meat_can",
         "base": "base_link_meat",
         "url": "package://manipulation/hydro/010_potted_meat_can.sdf",
@@ -75,7 +85,7 @@ image_size = width * height * 4
 CAMERA_INSTANCE_PREFIX = "camera"
 
 # Gym parameters
-sim_time_step = 0.01
+sim_time_step = 0.005
 gym_time_step = 0.1
 controller_time_step = 0.01
 gym_time_limit = 5
@@ -88,7 +98,8 @@ gym.envs.register(
     id="ResidualGrasp-v0", entry_point=("envs.residual_grasp:DrakeResidualGraspEnv")
 )
 
-def reset_all_objects(plant, active="sugar", rng=None):
+
+def reset_all_objects(plant, context=None, active="sugar", rng=None):
     for key, val in OBJECTS.items():
         if key == active:
             if not rng:
@@ -97,16 +108,15 @@ def reset_all_objects(plant, active="sugar", rng=None):
             q /= np.linalg.norm(q)
             x = rng.random() * 0.1 - 0.05
             y = rng.random() * 0.1 - 0.05
-            z = rng.random() * 0.2 + 0.1
-            plant.SetDefaultFreeBodyPose(
-                plant.GetBodyByName(val["base"]),
-                RigidTransform(RotationMatrix(Quaternion(q)), [x, y, z]),
-            )
+            z = rng.random() * 0.2 + 0.3
+            transform = RigidTransform(RotationMatrix(Quaternion(q)), [x, y, z])
         else:
-            plant.SetDefaultFreeBodyPose(
-                plant.GetBodyByName(val["base"]),
-                RigidTransform([1, 1, 0.1]),
-            )
+            transform = RigidTransform([1, 1, -1])
+
+        if plant.is_finalized():
+            plant.SetFreeBodyPose(context, plant.GetBodyByName(val["base"]), transform)
+        else:  # Hide inactive objects to below the floor
+            plant.SetDefaultFreeBodyPose(plant.GetBodyByName(val["base"]), transform)
     return plant.GetModelInstanceByName(OBJECTS[active]["name"])
 
 
@@ -130,7 +140,7 @@ def load_scenario(meshcat=None, obj_name="sugar", rng=None):
         X_FM=RigidTransform(RotationMatrix.MakeXRotation(-np.pi / 2), [0, 0, -0.1]),
     )
     for key, val in OBJECTS.items():
-         parser.AddModelsFromUrl(val["url"])
+        parser.AddModelsFromUrl(val["url"])
     obj = reset_all_objects(plant, active=obj_name, rng=rng)
     plant.Finalize()
     plant.SetDefaultPositions(
@@ -202,8 +212,19 @@ def load_scenario(meshcat=None, obj_name="sugar", rng=None):
     builder.ExportOutput(plant.GetOutputPort("body_poses"), "body_poses")
     builder.ExportOutput(plant.GetOutputPort("wsg_state"), "wsg_state")
     builder.ExportOutput(plant.GetOutputPort("sphere_state"), "sphere_state")
-    builder.ExportOutput(plant.get_state_output_port(obj), "object_state")
 
+    switch = builder.AddSystem(Switch(len(OBJECTS), 13))
+    selector = builder.AddNamedSystem(
+        "selector", ConstantVectorSource([OBJECTS[obj_name]["id"]])
+    )
+    builder.ExportOutput(selector.get_output_port(0), "active_obj_index")
+    builder.Connect(selector.get_output_port(0), switch.get_input_port(0))
+    for key, val in OBJECTS.items():
+        builder.Connect(
+            plant.GetOutputPort(f"{val["name"]}_state"),
+            switch.get_input_port(val["id"] + 1),
+        )
+    builder.ExportOutput(switch.get_output_port(0), "object_state")
     diagram = builder.Build()
     diagram.set_name("env")
 
@@ -262,12 +283,21 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
     builder.Connect(planner.GetOutputPort("X_WG"), transformer.get_input_port(0))
 
     # Actions from RL agent
+    # TODO: clip actions so that wsg stays within the robot's workspace
     demux = builder.AddSystem(Demultiplexer([6, 1]))
     builder.ExportInput(demux.get_input_port(0), "actions")
     adder = builder.AddSystem(Adder(2, 6))
     builder.Connect(demux.get_output_port(0), adder.get_input_port(0))
     builder.Connect(transformer.get_output_port(0), adder.get_input_port(1))
-    builder.Connect(adder.get_output_port(0), scenario.GetInputPort("position"))
+    sat = builder.AddSystem(
+        Saturation(
+            np.array([-1, -1, -1, -np.inf, -np.inf, -np.inf]),
+            np.array([1, 1, 1, np.inf, np.inf, np.inf]),
+        )
+    )
+    builder.Connect(adder.get_output_port(0), sat.get_input_port(0))
+    builder.Connect(sat.get_output_port(0), scenario.GetInputPort("position"))
+
     adder = builder.AddSystem(Adder(2, 1))
     builder.Connect(demux.get_output_port(1), adder.get_input_port(0))
     builder.Connect(planner.GetOutputPort("wsg_position"), adder.get_input_port(1))
@@ -360,7 +390,7 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
                 gripper_state[9:]
             )
             # TODO: add penalty for gripper movement and log cost to see if it is proportional
-            reward = 5 if object_state[2] >= 0.3 else 0
+            reward = 5 if object_state[6] >= 0.3 else 0
             output[0] = reward - cost
 
     reward = builder.AddSystem(RewardSystem())
@@ -381,9 +411,11 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
     def monitor(context):
         scenario_context = scenario.GetMyContextFromRoot(context)
         obj_state = scenario.GetOutputPort("object_state").Eval(scenario_context)
+        idx = scenario.GetOutputPort("active_obj_index").Eval(scenario_context)
+        # print(f"object #{idx} z-position = {obj_state[6]}")
 
-        if obj_state[2] < 0:
-            # print("object falls below 0")
+        if obj_state[6] < 0:
+            print("Terminal: Object falls below 0.")
             return EventStatus.ReachedTermination(diagram, "object falls below 0")
         if context.get_time() > time_limit:
             return EventStatus.ReachedTermination(diagram, "time limit")
@@ -402,6 +434,7 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
 
 
 def reset_handler(simulator, diagram_context, seed):
+    print("Reset")
     rng = np.random.default_rng(seed=seed)
     diagram = simulator.get_system()
     env = diagram.GetSubsystemByName("env")
@@ -422,7 +455,19 @@ def reset_handler(simulator, diagram_context, seed):
     )
     wsg = plant.GetModelInstanceByName("wsg")
     plant.SetPositions(plant_context, wsg, np.array([0, 0]))
-    reset_all_objects(plant, active=list(OBJECTS.keys())[np.random.randint(0, len(OBJECTS))], rng=rng)
+    active_object = list(OBJECTS.keys())[np.random.randint(0, len(OBJECTS))]
+    selector = env.GetSubsystemByName("selector")
+    selector_context = env.GetMutableSubsystemContext(selector, env_context)
+    selector.get_mutable_source_value(selector_context).set_value(
+        [OBJECTS[active_object]["id"]]
+    )
+    reset_all_objects(plant, context=plant_context, active=active_object, rng=rng)
+    pose = plant.EvalBodyPoseInWorld(
+        plant_context, plant.GetBodyByName(OBJECTS[active_object]["base"])
+    )
+    print(f"Active object = {active_object}, z-position = {pose.translation()[2]}")
+
+    simulator.Initialize()
 
 
 def info_handler(simulator: Simulator) -> dict:

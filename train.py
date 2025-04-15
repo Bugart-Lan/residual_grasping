@@ -15,6 +15,7 @@ from wandb.integration.sb3 import WandbCallback
 
 
 # import envs.floating_joint
+
 # import envs.end_to_end_grasp
 import envs.residual_grasp
 
@@ -34,7 +35,7 @@ def main():
 
     config = {
         "policy_type": "MultiInputPolicy",
-        "total_timesteps": 10 if not args.test else 5,
+        "total_timesteps": 5e4 if not args.test else 5,
         "env_name": "ResidualGrasp-v0",
         # "env_name": "EndToEndGrasp-v0",
         # "env_name": "FloatingJoint-v0",
@@ -80,7 +81,7 @@ def main():
             make_env,
             n_envs=num_cpu,
             seed=0,
-            vec_env_cls=SubprocVecEnv,
+            # vec_env_cls=SubprocVecEnv,
         )
 
     if args.test:
@@ -112,13 +113,17 @@ def main():
             device="cpu",
         )
 
+    total_params = sum(p.numel() for p in model.policy.parameters() if p.requires_grad)
+    print("Total number of parameters:", total_params)
+
     new_log = True
     while True:
         model.learn(
             total_timesteps=config["total_timesteps"] if not args.test else 4,
             reset_num_timesteps=new_log,
-            callback=WandbCallback(),
+            # callback=WandbCallback(),
         )
+        print("Finish!")
         if args.test:
             break
         model.save(zip)
