@@ -57,7 +57,8 @@ def main():
     # zip = "data/end_to_end_grasp.zip"
     zip = "data/residual_grasp.zip"
 
-    num_cpu = int(cpu_count() / 4)
+    # num_cpu = int(cpu_count() / 4)
+    num_cpu = 6
     if args.train_single_env:
         meshcat = StartMeshcat()
         env = gym.make(
@@ -81,7 +82,7 @@ def main():
             make_env,
             n_envs=num_cpu,
             seed=0,
-            # vec_env_cls=SubprocVecEnv,
+            vec_env_cls=SubprocVecEnv,
         )
 
     if args.test:

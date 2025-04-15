@@ -32,7 +32,6 @@ from pydrake.systems.primitives import (
 from pydrake.visualization import AddFrameTriadIllustration
 from manipulation.scenarios import AddRgbdSensors
 
-
 from drivers import GripperPoseToPosition, PositionController
 from utils import AddActuatedFloatingSphere, _ConfigureParser, Switch
 from GraspSelector import GraspSelector
@@ -74,8 +73,8 @@ OBJECTS = {
 height_threshold = 0.3  # z-coord higher than this threshold is considered as a success
 
 # Camera parameters
-width = 640
-height = 480
+width = 480
+height = 360
 channel = 4
 foy_y = np.pi / 4.0
 near = 0.1
@@ -85,7 +84,7 @@ image_size = width * height * 4
 CAMERA_INSTANCE_PREFIX = "camera"
 
 # Gym parameters
-sim_time_step = 0.005
+sim_time_step = 0.001
 gym_time_step = 0.1
 controller_time_step = 0.01
 gym_time_limit = 5
@@ -221,7 +220,7 @@ def load_scenario(meshcat=None, obj_name="sugar", rng=None):
     builder.Connect(selector.get_output_port(0), switch.get_input_port(0))
     for key, val in OBJECTS.items():
         builder.Connect(
-            plant.GetOutputPort(f"{val["name"]}_state"),
+            plant.GetOutputPort(f"{val['name']}_state"),
             switch.get_input_port(val["id"] + 1),
         )
     builder.ExportOutput(switch.get_output_port(0), "object_state")
@@ -319,9 +318,9 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
                 lambda: AbstractValue.Make(
                     {
                         "state": np.zeros(16),
-                        "image0": np.zeros((width, height, 4)),
-                        "image1": np.zeros((width, height, 4)),
-                        "image2": np.zeros((width, height, 4)),
+                        "image0": np.zeros((width, height, channel)),
+                        # "image1": np.zeros((width, height, 4)),
+                        # "image2": np.zeros((width, height, 4)),
                     }
                 ),
                 self.CalcObs,
@@ -350,8 +349,8 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
                 {
                     "state": np.concatenate([sphere_state, wsg_state]),
                     "image0": image0.data,
-                    "image1": image1.data,
-                    "image2": image2.data,
+                    # "image1": image1.data,
+                    # "image2": image2.data,
                 }
             )
 
@@ -380,18 +379,22 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
             LeafSystem.__init__(self)
             self.DeclareVectorInputPort("object_state", 13)
             self.DeclareVectorInputPort("gripper_state", 12)
+            self.DeclareVectorInputPort("wsg_state", 4)
             self.DeclareVectorOutputPort("reward", 1, self.CalcReward)
 
         def CalcReward(self, context, output):
             object_state = self.get_input_port(0).Eval(context)
             gripper_state = self.get_input_port(1).Eval(context)
-            # Penalty for linear velocity and angular velocity
-            cost = np.linalg.norm(gripper_state[6:9]) + np.linalg.norm(
-                gripper_state[9:]
-            )
-            # TODO: add penalty for gripper movement and log cost to see if it is proportional
-            reward = 5 if object_state[6] >= 0.3 else 0
-            output[0] = reward - cost
+            wsg_state = self.get_input_port(2).Eval(context)
+            # Penalty for linear velocity 
+            cost = 0.1 * np.linalg.norm(gripper_state[6:9])
+            # Penalty for angular velocity
+            cost += 0.1 * np.linalg.norm(gripper_state[9:])
+            # Penalty for gripper movement
+            cost += 0.5 * np.linalg.norm(wsg_state[2:])
+            cost += 0.2 * np.linalg.norm(object_state[4:7] - gripper_state[:3])
+            reward = 10 if object_state[6] >= 0.3 else 0
+            output[0] = reward - cost + 1
 
     reward = builder.AddSystem(RewardSystem())
     builder.Connect(
@@ -402,6 +405,7 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
         scenario.GetOutputPort("sphere_state"),
         reward.get_input_port(1),
     )
+    builder.Connect(scenario.GetOutputPort("wsg_state"), reward.get_input_port(2))
     builder.ExportOutput(reward.get_output_port(), "reward")
 
     diagram = builder.Build()
@@ -434,7 +438,6 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
 
 
 def reset_handler(simulator, diagram_context, seed):
-    print("Reset")
     rng = np.random.default_rng(seed=seed)
     diagram = simulator.get_system()
     env = diagram.GetSubsystemByName("env")
@@ -513,18 +516,18 @@ def DrakeResidualGraspEnv(
                 shape=(height, width, channel),
                 dtype=np.uint8,
             ),
-            "image1": gym.spaces.Box(
-                low=0,
-                high=255,
-                shape=(height, width, channel),
-                dtype=np.uint8,
-            ),
-            "image2": gym.spaces.Box(
-                low=0,
-                high=255,
-                shape=(height, width, channel),
-                dtype=np.uint8,
-            ),
+            # "image1": gym.spaces.Box(
+            #     low=0,
+            #     high=255,
+            #     shape=(height, width, channel),
+            #     dtype=np.uint8,
+            # ),
+            # "image2": gym.spaces.Box(
+            #     low=0,
+            #     high=255,
+            #     shape=(height, width, channel),
+            #     dtype=np.uint8,
+            # ),
         }
     )
 

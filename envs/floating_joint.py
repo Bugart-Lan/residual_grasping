@@ -24,7 +24,7 @@ from pydrake.systems.framework import DiagramBuilder, EventStatus, LeafSystem
 from pydrake.systems.primitives import ConstantVectorSource, Multiplexer, PassThrough
 from pydrake.systems.sensors import CameraInfo, ImageRgba8U
 from pydrake.visualization import AddFrameTriadIllustration
-from manipulation.scenarios import AddRgbdSensor, AddRgbdSensors
+from manipulation.scenarios import AddRgbdSensor
 from manipulation.utils import ConfigureParser
 
 from drivers import PositionController
