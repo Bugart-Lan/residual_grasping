@@ -33,9 +33,11 @@ from pydrake.visualization import AddFrameTriadIllustration
 from manipulation.scenarios import AddRgbdSensors
 
 from drivers import GripperPoseToPosition, PositionController
+from envs.custom_drake_gym_env_residual import CustomDrakeGymEnvResidual
 from utils import AddActuatedFloatingSphere, _ConfigureParser, Switch
 from GraspSelector import GraspSelector
 from GraspPlanner import GraspPlanner
+
 
 # Objects
 OBJECTS = {
@@ -84,7 +86,7 @@ image_size = width * height * 4
 CAMERA_INSTANCE_PREFIX = "camera"
 
 # Gym parameters
-sim_time_step = 0.001
+sim_time_step = 0.005
 gym_time_step = 0.1
 controller_time_step = 0.01
 gym_time_limit = 5
@@ -386,7 +388,7 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
             object_state = self.get_input_port(0).Eval(context)
             gripper_state = self.get_input_port(1).Eval(context)
             wsg_state = self.get_input_port(2).Eval(context)
-            # Penalty for linear velocity 
+            # Penalty for linear velocity
             cost = 0.1 * np.linalg.norm(gripper_state[6:9])
             # Penalty for angular velocity
             cost += 0.1 * np.linalg.norm(gripper_state[9:])
@@ -470,8 +472,6 @@ def reset_handler(simulator, diagram_context, seed):
     )
     print(f"Active object = {active_object}, z-position = {pose.translation()[2]}")
 
-    simulator.Initialize()
-
 
 def info_handler(simulator: Simulator) -> dict:
     info = dict()
@@ -510,6 +510,7 @@ def DrakeResidualGraspEnv(
             "state": gym.spaces.Box(
                 low=np.asarray(low), high=np.asarray(high), dtype=np.float64
             ),
+            # "image": gym.spaces.Box(shape=(512,), dtype=np.float32),
             "image0": gym.spaces.Box(
                 low=0,
                 high=255,
@@ -531,7 +532,7 @@ def DrakeResidualGraspEnv(
         }
     )
 
-    env = DrakeGymEnv(
+    env = CustomDrakeGymEnvResidual(
         simulator=simulator,
         time_step=gym_time_step,
         action_space=action_space,

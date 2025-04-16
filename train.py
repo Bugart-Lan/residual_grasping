@@ -17,7 +17,9 @@ from wandb.integration.sb3 import WandbCallback
 # import envs.floating_joint
 
 # import envs.end_to_end_grasp
-import envs.residual_grasp
+# import envs.residual_grasp
+
+import envs.one_step_end2end_grasp
 
 # import manipulation.envs.box_flipup
 
@@ -34,9 +36,10 @@ def main():
     args = parser.parse_args()
 
     config = {
-        "policy_type": "MultiInputPolicy",
-        "total_timesteps": 5e4 if not args.test else 5,
-        "env_name": "ResidualGrasp-v0",
+        "policy_type": "MlpPolicy",
+        "total_timesteps": 1e4 if not args.test else 5,
+        "env_name": "OneStepEnd2EndGrasp-v0",
+        # "env_name": "ResidualGrasp-v0",
         # "env_name": "EndToEndGrasp-v0",
         # "env_name": "FloatingJoint-v0",
         "env_time_limit": 10 if not args.test else 0.5,
@@ -55,7 +58,7 @@ def main():
         run = wandb.init(mode="disabled")
 
     # zip = "data/end_to_end_grasp.zip"
-    zip = "data/residual_grasp.zip"
+    zip = "data/one_step_end2end.zip"
 
     # num_cpu = int(cpu_count() / 4)
     num_cpu = 6
@@ -65,7 +68,7 @@ def main():
             config["env_name"],
             meshcat=meshcat,
             time_limit=config["env_time_limit"],
-            debug=True,
+            debug=False,
         )
         check_env(env)
         input("Open meshcat (optional). Press Enter to continue...")
