@@ -243,7 +243,7 @@ N = 1
 cnt_success = 0
 for i in range(N):
     print(f"Running {i}-th test...")
-    results = main(obj_name="meat", show_diagram=False)
+    results = main(obj_name="soup", show_diagram=False)
     cnt_success += results
 
 print(f"# of successful grasp = {cnt_success}")

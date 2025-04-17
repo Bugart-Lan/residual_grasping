@@ -25,7 +25,7 @@ def MakeGripperFrames(X_WG, t0=0):
     X_WG["pick_start"] = X_WG["pick"]
     X_WG["pick_end"] = X_WG["pick"]
     times["postpick"] = times["pick_end"] + 1.0
-    X_WG["postpick"] = RigidTransform(RotationMatrix.MakeXRotation(-np.pi / 2), [0, 0, 0.5])
+    X_WG["postpick"] = RigidTransform(RotationMatrix.MakeXRotation(-np.pi / 2), [0, 0, 0.7])
     times["end"] = times["postpick"] + 10.0
     X_WG["end"] = X_WG["postpick"]
 
