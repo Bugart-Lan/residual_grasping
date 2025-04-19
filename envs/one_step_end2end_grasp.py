@@ -31,7 +31,12 @@ from pydrake.systems.framework import (
     EventStatus,
     LeafSystem,
 )
-from pydrake.systems.sensors import CameraInfo, ImageDepth16U, ImageDepth32F, ImageRgba8U
+from pydrake.systems.sensors import (
+    CameraInfo,
+    ImageDepth16U,
+    ImageDepth32F,
+    ImageRgba8U,
+)
 from pydrake.systems.primitives import Demultiplexer, PassThrough
 from manipulation.scenarios import AddRgbdSensors
 
@@ -66,7 +71,9 @@ class PointCloudMerger(LeafSystem):
         self._crop_lower = [-0.2, -0.2, 0.05]
         self._crop_upper = [0.2, 0.2, 0.25]
 
-        port = self.DeclareAbstractOutputPort("cloud", lambda: model_point_cloud, self.CalcOutput)
+        port = self.DeclareAbstractOutputPort(
+            "cloud", lambda: model_point_cloud, self.CalcOutput
+        )
 
     def CalcOutput(self, context, output):
         pcd = []
@@ -76,7 +83,6 @@ class PointCloudMerger(LeafSystem):
         merged_pcd = Concatenate(pcd)
         down_sampled_pcd = merged_pcd.VoxelizedDownSample(voxel_size=0.005)
         output.set_value(down_sampled_pcd)
-
 
 
 height_threshold = 0.3  # z-coord higher than this threshold is considered as a success
@@ -252,23 +258,29 @@ def setup(meshcat=None, time_limit=5, debug=False, obs_noise=False):
 
     return diagram
 
-    
+
 def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
     builder = DiagramBuilder()
-    diagram = builder.AddSystem(setup(meshcat=meshcat, time_limit=time_limit, debug=debug, obs_noise=obs_noise))
+    diagram = builder.AddSystem(
+        setup(meshcat=meshcat, time_limit=time_limit, debug=debug, obs_noise=obs_noise)
+    )
     merger = builder.AddSystem(PointCloudMerger())
-    builder.Connect(diagram.GetOutputPort("camera0_point_cloud"), merger.get_input_port(0))
-    builder.Connect(diagram.GetOutputPort("camera1_point_cloud"), merger.get_input_port(1))
-    builder.Connect(diagram.GetOutputPort("camera2_point_cloud"), merger.get_input_port(2))
+    builder.Connect(
+        diagram.GetOutputPort("camera0_point_cloud"), merger.get_input_port(0)
+    )
+    builder.Connect(
+        diagram.GetOutputPort("camera1_point_cloud"), merger.get_input_port(1)
+    )
+    builder.Connect(
+        diagram.GetOutputPort("camera2_point_cloud"), merger.get_input_port(2)
+    )
 
     class ObservationPublisher(LeafSystem):
         def __init__(self, noise=False):
             LeafSystem.__init__(self)
             self.DeclareAbstractInputPort("image0", AbstractValue.Make(ImageDepth32F()))
             self.DeclareAbstractInputPort("cloud", AbstractValue.Make(PointCloud()))
-            self.DeclareVectorOutputPort(
-                "observations", cloud_size * 3, self.CalcObs
-            )
+            self.DeclareVectorOutputPort("observations", cloud_size * 3, self.CalcObs)
             self.noise = noise
 
         def CalcObs(self, context, output):
@@ -278,7 +290,9 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
             output.SetFromVector(np.nan_to_num(cloud.xyzs().reshape(-1)))
 
     obs_pub = builder.AddSystem(ObservationPublisher(noise=obs_noise))
-    builder.Connect(diagram.GetOutputPort("camera0_depth_image"), obs_pub.get_input_port(0))
+    builder.Connect(
+        diagram.GetOutputPort("camera0_depth_image"), obs_pub.get_input_port(0)
+    )
     builder.Connect(merger.get_output_port(0), obs_pub.get_input_port(1))
     builder.ExportOutput(obs_pub.get_output_port(), "observations")
     builder.ExportOutput(diagram.GetOutputPort("reward"), "reward")
@@ -291,9 +305,24 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
     def monitor(context):
         plant = diagram.GetSubsystemByName("plant")
         plant_context = plant.GetMyContextFromRoot(context)
-        obj_state = plant.GetOutputPort("004_sugar_box_state").Eval(plant_context)
-        # print(f"object z-position = {obj_state[2]}")
 
+        scene_graph = diagram.GetSubsystemByName("scene_graph")
+        scene_graph_context = scene_graph.GetMyContextFromRoot(context)
+        query_object = scene_graph.get_query_output_port().Eval(scene_graph_context)
+        wsg = plant.GetBodyByName("body")
+        floor = plant.GetBodyByName("box")
+        gids_wsg = plant.GetCollisionGeometriesForBody(wsg)
+        gids_floor = plant.GetCollisionGeometriesForBody(floor)
+        for pair in query_object.ComputePointPairPenetration():
+            if (pair.id_A in gids_wsg and pair.id_B in gids_floor) or (
+                pair.id_B in gids_wsg and pair.id_A in gids_floor
+            ):
+                print("Collision between floor and wsg detected!")
+                return EventStatus.ReachedTermination(
+                    diagram, "Collision between floor and wsg detected!"
+                )
+
+        obj_state = plant.GetOutputPort("004_sugar_box_state").Eval(plant_context)
         if obj_state[6] < -0.01:
             print("object falls below 0")
             return EventStatus.ReachedTermination(diagram, "object falls below 0")
