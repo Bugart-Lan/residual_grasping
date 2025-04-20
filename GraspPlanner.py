@@ -27,7 +27,9 @@ def MakeGripperFrames(X_WG, t0=0):
     X_WG["pick_end"] = X_WG["pick"]
     # times["postpick"] = times["pick_end"] + 1.0
     times["postpick"] = 3
-    X_WG["postpick"] = RigidTransform(RotationMatrix.MakeXRotation(-np.pi / 2), [0, 0, 0.7])
+    X_WG["postpick"] = RigidTransform(
+        RotationMatrix.MakeXRotation(-np.pi / 2), [0, 0, 0.7]
+    )
     times["end"] = times["postpick"] + 10.0
     X_WG["end"] = X_WG["postpick"]
 
@@ -74,7 +76,7 @@ class PlannerState(Enum):
 
 class GraspPlanner(LeafSystem):
 
-    def __init__(self, plant):
+    def __init__(self, plant, wait_time=0.5):
         LeafSystem.__init__(self)
         # Inputs
         self.DeclareAbstractInputPort(
@@ -107,13 +109,14 @@ class GraspPlanner(LeafSystem):
         )
 
         self.DeclarePeriodicUnrestrictedUpdateEvent(0.1, 0.0, self.Update)
+        self._wait_time = wait_time
 
     def Update(self, context, state):
         mode = context.get_abstract_state(int(self._mode_index)).get_value()
         times = context.get_abstract_state(int(self._times_index)).get_value()
         if mode == PlannerState.WAIT:
             # Wait for some amount of time for the objects to settle down
-            if context.get_time() - times["initial"] > 0.5:
+            if context.get_time() - times["initial"] > self._wait_time:
                 self.Plan(context, state)
             return
 

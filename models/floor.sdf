@@ -30,7 +30,7 @@
         <pose>0 0 0 0 0 -0.05</pose>
         <geometry>
           <box>
-            <size>2 2 0.0505</size>
+            <size>2 2 0.08</size>
           </box>
         </geometry>
       </collision>

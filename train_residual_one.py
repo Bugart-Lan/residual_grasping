@@ -13,7 +13,7 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from wandb.integration.sb3 import WandbCallback
 
-import envs.one_step_end2end_grasp
+import envs.residual_one
 
 
 def main():
@@ -30,7 +30,7 @@ def main():
     config = {
         "policy_type": "MlpPolicy",
         "total_timesteps": 5e5 if not args.test else 5,
-        "env_name": "OneStepEnd2EndGrasp-v0",
+        "env_name": "ResidualGraspOne-v0",
         "env_time_limit": 3 if not args.test else 0.5,
         "observations": "state",
     }
@@ -46,7 +46,7 @@ def main():
     else:
         run = wandb.init(mode="disabled")
 
-    zip = "data/one_step_e2e.zip"
+    zip = "data/residual_grasp_one.zip"
 
     # num_cpu = int(cpu_count() / 4)
     num_cpu = 36
@@ -57,6 +57,7 @@ def main():
             meshcat=meshcat,
             time_limit=config["env_time_limit"],
             debug=True,
+            obs_noise=True,
         )
         check_env(env)
         input("Open meshcat (optional). Press Enter to continue...")
@@ -100,8 +101,8 @@ def main():
         model = PPO(
             config["policy_type"],
             env,
-            n_steps=1024,
-            n_epochs=5,
+            n_steps=128,
+            n_epochs=3,
             batch_size=64,
             verbose=1,
             tensorboard_log=args.log_path or f"runs/{run.id}",

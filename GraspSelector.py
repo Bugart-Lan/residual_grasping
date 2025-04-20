@@ -150,7 +150,7 @@ def GenerateAntipodalGraspCandidate(
         X_G: The grasp candidate
     """
     if cloud.size() <= 0:
-        print("Point cloud is empty.")
+        # print("Point cloud is empty.")
         return np.inf, None
 
     plant = diagram.GetSubsystemByName(plant_system_name)
@@ -226,7 +226,7 @@ def make_internal_model(meshcat=None):
 
 
 class GraspSelector(LeafSystem):
-    def __init__(self, camera_body_indices, meshcat=None):
+    def __init__(self, camera_body_indices, meshcat=None, noise=False):
         LeafSystem.__init__(self)
         model_point_cloud = AbstractValue.Make(PointCloud(0))
         self.DeclareAbstractInputPort("cloud0_W", model_point_cloud)
@@ -243,7 +243,7 @@ class GraspSelector(LeafSystem):
         )
         port.disable_caching_by_default()
 
-        self._crop_lower = [-0.2, -0.2, 0.03]
+        self._crop_lower = [-0.2, -0.2, 0.05]
         self._crop_upper = [0.2, 0.2, 0.25]
 
         self._internal_model = make_internal_model(meshcat)
@@ -252,12 +252,17 @@ class GraspSelector(LeafSystem):
         self._camera_body_indices = camera_body_indices
 
         self._meshcat = meshcat
+        self._noise = noise
 
     def SelectGrasp(self, context, output):
         body_poses = self.get_input_port(3).Eval(context)
         pcd = []
         for i in range(3):
             cloud = self.get_input_port(i).Eval(context)
+            # Add constant offset to point cloud
+            if self._noise:
+                p = cloud.mutable_xyzs()
+                p += np.array([[0.05], [0], [0]])
             pcd.append(cloud.Crop(self._crop_lower, self._crop_upper))
             pcd[i].EstimateNormals(radius=0.1, num_closest=30)
 
@@ -267,7 +272,9 @@ class GraspSelector(LeafSystem):
         merged_pcd = Concatenate(pcd)
         down_sampled_pcd = merged_pcd.VoxelizedDownSample(voxel_size=0.005)
         if self._meshcat:
-            self._meshcat.SetObject("intenral/cloud", down_sampled_pcd, point_size=0.003)
+            self._meshcat.SetObject(
+                "intenral/cloud", down_sampled_pcd, point_size=0.003
+            )
 
         costs = []
         X_Gs = []

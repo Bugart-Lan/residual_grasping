@@ -1,5 +1,4 @@
 from typing import Callable
-import itertools
 import warnings
 
 import gymnasium as gym
@@ -13,7 +12,6 @@ from pydrake.geometry import (
     DepthRenderCamera,
     MeshcatVisualizer,
     RenderCameraCore,
-    SourceId
 )
 from pydrake.gym import DrakeGymEnv
 from pydrake.manipulation import SchunkWsgPositionController
@@ -24,71 +22,22 @@ from pydrake.multibody.plant import (
     MultibodyPlant,
     MultibodyPlantConfig,
 )
-from pydrake.multibody.tree import ModelInstanceIndex
 from pydrake.perception import Concatenate, PointCloud
 from pydrake.systems.analysis import Simulator, SimulatorStatus
-from pydrake.systems.drawing import plot_graphviz
-from pydrake.systems.framework import (
-    Context,
-    DiagramBuilder,
-    EventStatus,
-    LeafSystem,
-)
-from pydrake.systems.sensors import (
-    CameraInfo,
-    ImageDepth16U,
-    ImageDepth32F,
-    ImageRgba8U,
-)
-from pydrake.systems.primitives import Demultiplexer, PassThrough
+from pydrake.systems.framework import Context, DiagramBuilder, EventStatus, LeafSystem
+from pydrake.systems.sensors import CameraInfo
 from manipulation.scenarios import AddRgbdSensors
 
 
 from drivers import GripperPoseToPosition, PositionController
-from utils import AddActuatedFloatingSphere, _ConfigureParser
+from utils import (
+    ActionToSE3,
+    AddActuatedFloatingSphere,
+    PointCloudMerger,
+    _ConfigureParser,
+)
 
 from GraspPlanner import GraspPlanner
-
-
-class ActionToSE3(LeafSystem):
-    def __init__(self):
-        LeafSystem.__init__(self)
-        self.DeclareVectorInputPort("actions", 7)
-        self.DeclareAbstractOutputPort(
-            "grasp", lambda: AbstractValue.Make((0, RigidTransform())), self.CalcOutput
-        )
-
-    def CalcOutput(self, context, output):
-        x = self.get_input_port(0).Eval(context)
-        if np.linalg.norm(x[:4]) >= 0.01:
-            q = x[:4] / np.linalg.norm(x[:4])
-        else:
-            q = np.array([1, 0, 0, 0])
-        output.set_value((0, RigidTransform(Quaternion(q), x[4:])))
-
-
-class PointCloudMerger(LeafSystem):
-    def __init__(self):
-        LeafSystem.__init__(self)
-        model_point_cloud = AbstractValue.Make(PointCloud())
-        self.DeclareAbstractInputPort("cloud0", model_point_cloud)
-        self.DeclareAbstractInputPort("cloud1", model_point_cloud)
-        self.DeclareAbstractInputPort("cloud2", model_point_cloud)
-        self._crop_lower = [-0.2, -0.2, 0.05]
-        self._crop_upper = [0.2, 0.2, 0.25]
-        self.DeclareAbstractOutputPort(
-            "cloud", lambda: model_point_cloud, self.CalcOutput
-        )
-
-    def CalcOutput(self, context, output):
-        pcd = []
-        for i in range(3):
-            cloud = self.get_input_port(i).Eval(context)
-            pcd.append(cloud.Crop(self._crop_lower, self._crop_upper))
-        merged_pcd = Concatenate(pcd)
-        down_sampled_pcd = merged_pcd.VoxelizedDownSample(voxel_size=0.005)
-        output.set_value(down_sampled_pcd)
-
 
 height_threshold = 0.3  # z-coord higher than this threshold is considered as a success
 
@@ -245,7 +194,7 @@ def setup(meshcat=None, time_limit=5, debug=False, obs_noise=False):
             object_state = self.get_input_port(0).Eval(context)
             gripper_state = self.get_input_port(1).Eval(context)
             cost = np.linalg.norm(object_state[4:7] - gripper_state[:3]) ** 2
-            reward = 100 if time >= 1 and object_state[6] >= 0.3 else 1
+            reward = 100 if time >= 0.5 and object_state[6] >= 0.3 else 1
             output[0] = reward - cost
 
     reward = builder.AddSystem(RewardSystem())
@@ -322,7 +271,7 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
         #             return EventStatus.ReachedTermination(
         #                 diagram, "Collision between floor and wsg detected!"
         #             )
-        
+
         obj_state = plant.GetOutputPort("004_sugar_box_state").Eval(plant_context)
         if obj_state[6] < -0.025:
             # print("object falls below 0")
@@ -336,9 +285,9 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
     if debug:
         import pydot
 
-        pydot.graph_from_dot_data(final_diagram.GetGraphvizString(max_depth=2))[0].write_png(
-            "images/OneStepEnd2EndGrasp-v0-diagram.png"
-        )
+        pydot.graph_from_dot_data(final_diagram.GetGraphvizString(max_depth=2))[
+            0
+        ].write_png("images/OneStepEnd2EndGrasp-v0-diagram.png")
 
     return simulator
 
@@ -429,7 +378,7 @@ class OneStepEnd2EndGrasp(DrakeGymEnv):
             terminated = False
             reward = 0
             info = dict()
-            
+
             return prev_observation, reward, terminated, truncated, info
 
         observation = self.observation_port.Eval(context)
