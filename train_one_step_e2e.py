@@ -29,9 +29,9 @@ def main():
 
     config = {
         "policy_type": "MlpPolicy",
-        "total_timesteps": 5e4 if not args.test else 5,
+        "total_timesteps": 5e5 if not args.test else 5,
         "env_name": "OneStepEnd2EndGrasp-v0",
-        "env_time_limit": 10 if not args.test else 0.5,
+        "env_time_limit": 3 if not args.test else 0.5,
         "observations": "state",
     }
 
@@ -46,10 +46,10 @@ def main():
     else:
         run = wandb.init(mode="disabled")
 
-    zip = "../data/one_step_e2e.zip"
+    zip = "data/one_step_e2e.zip"
 
     # num_cpu = int(cpu_count() / 4)
-    num_cpu = 6
+    num_cpu = 36
     if args.train_single_env:
         meshcat = StartMeshcat()
         env = gym.make(
@@ -100,6 +100,9 @@ def main():
         model = PPO(
             config["policy_type"],
             env,
+            n_steps = 1024,
+            n_epochs=5,
+            batch_size=64,
             verbose=1,
             tensorboard_log=args.log_path or f"runs/{run.id}",
             device="cpu",
@@ -113,7 +116,7 @@ def main():
         model.learn(
             total_timesteps=config["total_timesteps"] if not args.test else 4,
             reset_num_timesteps=new_log,
-            # callback=WandbCallback(),
+            callback=WandbCallback(),
         )
         print("Finish!")
         if args.test:

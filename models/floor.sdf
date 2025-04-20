@@ -26,43 +26,11 @@
           <diffuse>1 1 1 1</diffuse>
         </material>
       </visual>
-      <collision name="bottom">
+      <collision name="collision">
         <pose>0 0 0 0 0 -0.05</pose>
         <geometry>
           <box>
-            <size>2 2 0.05</size>
-          </box>
-        </geometry>
-      </collision>
-      <collision name="front">
-        <pose>2 0 .15 0 0 0</pose>
-        <geometry>
-          <box>
-            <size>.1 4 0.3</size>
-          </box>
-        </geometry>
-      </collision>
-      <collision name="back">
-        <pose>-2 0 .15 0 0 0</pose>
-        <geometry>
-          <box>
-            <size>.1 4 0.3</size>
-          </box>
-        </geometry>
-      </collision>
-      <collision name="left">
-        <pose>0 2 .15 0 0 0</pose>
-        <geometry>
-          <box>
-            <size>4 .1 0.3</size>
-          </box>
-        </geometry>
-      </collision>
-      <collision name="right">
-        <pose>0 -2 .15 0 0 0</pose>
-        <geometry>
-          <box>
-            <size>4 .1 0.3</size>
+            <size>2 2 0.0505</size>
           </box>
         </geometry>
       </collision>

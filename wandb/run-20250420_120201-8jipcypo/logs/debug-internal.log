@@ -1,0 +1,8 @@
+{"time":"2025-04-20T12:02:01.507616321-05:00","level":"INFO","msg":"stream: starting","core version":"0.19.9","symlink path":"/home/yyan-admin/yl43338/residual_grasping/wandb/run-20250420_120201-8jipcypo/logs/debug-core.log"}
+{"time":"2025-04-20T12:02:01.670987712-05:00","level":"INFO","msg":"created new stream","id":"8jipcypo"}
+{"time":"2025-04-20T12:02:01.671017047-05:00","level":"INFO","msg":"stream: started","id":"8jipcypo"}
+{"time":"2025-04-20T12:02:01.671054524-05:00","level":"INFO","msg":"sender: started","stream_id":"8jipcypo"}
+{"time":"2025-04-20T12:02:01.671065761-05:00","level":"INFO","msg":"writer: Do: started","stream_id":"8jipcypo"}
+{"time":"2025-04-20T12:02:01.671121657-05:00","level":"INFO","msg":"handler: started","stream_id":"8jipcypo"}
+{"time":"2025-04-20T12:02:01.82193005-05:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-04-20T12:02:18.192629596-05:00","level":"INFO","msg":"tensorboard: no root directory after 10 seconds, using working directory"}

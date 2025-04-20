@@ -1,0 +1,81 @@
+Number of CPU used for training = 36
+Creating PPO model...
+Using cpu device
+Total number of parameters: 392975
+Logging to runs/0420/PPO_13
+---------------------------------
+| rollout/           |          |
+|    ep_len_mean     | 2.94     |
+|    ep_rew_mean     | 1.9      |
+| time/              |          |
+|    fps             | 22       |
+|    iterations      | 1        |
+|    time_elapsed    | 1603     |
+|    total_timesteps | 36864    |
+---------------------------------
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 2.95        |
+|    ep_rew_mean          | 1.87        |
+| time/                   |             |
+|    fps                  | 23          |
+|    iterations           | 2           |
+|    time_elapsed         | 3205        |
+|    total_timesteps      | 73728       |
+| train/                  |             |
+|    approx_kl            | 0.009893994 |
+|    clip_fraction        | 0.0709      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -9.94       |
+|    explained_variance   | 2.13e-05    |
+|    learning_rate        | 0.0003      |
+|    loss                 | 0.0169      |
+|    n_updates            | 5           |
+|    policy_gradient_loss | -0.00469    |
+|    std                  | 1           |
+|    value_loss           | 126         |
+-----------------------------------------
+------------------------------------------
+| rollout/                |              |
+|    ep_len_mean          | 2.95         |
+|    ep_rew_mean          | 1.8          |
+| time/                   |              |
+|    fps                  | 22           |
+|    iterations           | 3            |
+|    time_elapsed         | 4840         |
+|    total_timesteps      | 110592       |
+| train/                  |              |
+|    approx_kl            | 0.0100832395 |
+|    clip_fraction        | 0.109        |
+|    clip_range           | 0.2          |
+|    entropy_loss         | -9.95        |
+|    explained_variance   | 6.29e-05     |
+|    learning_rate        | 0.0003       |
+|    loss                 | 60.3         |
+|    n_updates            | 10           |
+|    policy_gradient_loss | -0.00597     |
+|    std                  | 1            |
+|    value_loss           | 1.37e+03     |
+------------------------------------------
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 2.94        |
+|    ep_rew_mean          | 1.31        |
+| time/                   |             |
+|    fps                  | 21          |
+|    iterations           | 4           |
+|    time_elapsed         | 6723        |
+|    total_timesteps      | 147456      |
+| train/                  |             |
+|    approx_kl            | 0.011306267 |
+|    clip_fraction        | 0.125       |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -9.96       |
+|    explained_variance   | 0.00756     |
+|    learning_rate        | 0.0003      |
+|    loss                 | 0.00582     |
+|    n_updates            | 15          |
+|    policy_gradient_loss | -0.00502    |
+|    std                  | 1.01        |
+|    value_loss           | 35.9        |
+-----------------------------------------

@@ -1,0 +1,16 @@
+{"time":"2025-04-20T11:46:07.571603511-05:00","level":"INFO","msg":"stream: starting","core version":"0.19.9","symlink path":"/home/yyan-admin/yl43338/residual_grasping/wandb/run-20250420_114607-8jer8mbu/logs/debug-core.log"}
+{"time":"2025-04-20T11:46:07.73561739-05:00","level":"INFO","msg":"created new stream","id":"8jer8mbu"}
+{"time":"2025-04-20T11:46:07.735661007-05:00","level":"INFO","msg":"stream: started","id":"8jer8mbu"}
+{"time":"2025-04-20T11:46:07.735704313-05:00","level":"INFO","msg":"writer: Do: started","stream_id":"8jer8mbu"}
+{"time":"2025-04-20T11:46:07.735713557-05:00","level":"INFO","msg":"sender: started","stream_id":"8jer8mbu"}
+{"time":"2025-04-20T11:46:07.735769152-05:00","level":"INFO","msg":"handler: started","stream_id":"8jer8mbu"}
+{"time":"2025-04-20T11:46:07.863080779-05:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-04-20T11:46:24.269651679-05:00","level":"INFO","msg":"tensorboard: no root directory after 10 seconds, using working directory"}
+{"time":"2025-04-20T11:46:40.075243442-05:00","level":"INFO","msg":"stream: closing","id":"8jer8mbu"}
+{"time":"2025-04-20T11:46:40.075280518-05:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-04-20T11:46:40.075405279-05:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-04-20T11:46:40.363224974-05:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-04-20T11:46:40.446773091-05:00","level":"INFO","msg":"handler: closed","stream_id":"8jer8mbu"}
+{"time":"2025-04-20T11:46:40.446810809-05:00","level":"INFO","msg":"writer: Close: closed","stream_id":"8jer8mbu"}
+{"time":"2025-04-20T11:46:40.446849838-05:00","level":"INFO","msg":"sender: closed","stream_id":"8jer8mbu"}
+{"time":"2025-04-20T11:46:40.446891131-05:00","level":"INFO","msg":"stream: closed","id":"8jer8mbu"}

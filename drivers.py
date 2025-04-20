@@ -20,7 +20,7 @@ pid_coeffs = {
         "kp": np.array([2000, 1500, 1500, 1500, 1500, 500, 500]),
     },
     "point": {
-        "kp": 100 * np.ones((6, 1)),
+        "kp": 100 * np.ones((6)),
         "limit": 1000,
     },
 }
@@ -28,6 +28,19 @@ pid_coeffs["iiwa"]["kd"] = 2 * np.sqrt(pid_coeffs["iiwa"]["kp"])
 pid_coeffs["iiwa"]["ki"] = np.ones_like(pid_coeffs["iiwa"]["kp"])
 pid_coeffs["point"]["kd"] = 2 * np.sqrt(pid_coeffs["point"]["kp"])
 pid_coeffs["point"]["ki"] = 20 * np.ones_like(pid_coeffs["point"]["kp"])
+
+
+class SanityCheck(LeafSystem):
+    def __init__(self, n):
+        super().__init__()
+        self.DeclareVectorInputPort("in", n)
+        self.DeclareVectorOutputPort("out", n, self.CalcOutput)
+
+    def CalcOutput(self, context, output):
+        u = self.get_input_port(0).Eval(context)
+        if not np.all(np.isfinite(u)):
+            raise RuntimeError("Something is not finite")
+        output.SetFromVector(u)
 
 
 class GripperPoseToPosition(LeafSystem):
@@ -100,9 +113,9 @@ class PositionController(Diagram):
             inverse_dynamics.GetInputPort("desired_state"),
         )
         builder.ConnectInput("state", inverse_dynamics.GetInputPort("estimated_state"))
-        builder.ExportOutput(
-            inverse_dynamics.GetOutputPort("generalized_force"), "actuation"
-        )
+        check = builder.AddSystem(SanityCheck(6))
+        builder.Connect(inverse_dynamics.GetOutputPort("generalized_force"), check.get_input_port(0))
+        builder.ExportOutput(check.get_output_port(0), "actuation")
 
         position_pass_through = builder.AddNamedSystem(
             "position_pass_through", PassThrough(num_positions)

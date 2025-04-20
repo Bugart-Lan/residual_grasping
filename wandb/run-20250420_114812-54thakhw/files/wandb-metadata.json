@@ -1,0 +1,47 @@
+{
+  "os": "Linux-6.8.0-52-generic-x86_64-with-glibc2.35",
+  "python": "CPython 3.10.12",
+  "startedAt": "2025-04-20T16:48:12.542039Z",
+  "args": [
+    "--log_path",
+    "runs/0420",
+    "--wandb"
+  ],
+  "program": "/home/yyan-admin/yl43338/residual_grasping/train_one_step_e2e.py",
+  "codePath": "train_one_step_e2e.py",
+  "git": {
+    "remote": "https://github.com/Bugart-Lan/residual_grasping.git",
+    "commit": "550c467af0d29f76ed6f87db2fe92916e12bd78a"
+  },
+  "email": "bugart.lan@utexas.edu",
+  "root": "/home/yyan-admin/yl43338/residual_grasping",
+  "host": "mech-d23074.austin.utexas.edu",
+  "executable": "/home/yyan-admin/yl43338/env/bin/python",
+  "codePathLocal": "train_one_step_e2e.py",
+  "cpu_count": 24,
+  "cpu_count_logical": 48,
+  "gpu": "NVIDIA GeForce RTX 4080",
+  "gpu_count": 1,
+  "disk": {
+    "/": {
+      "total": "4025769295872",
+      "used": "774689456128"
+    }
+  },
+  "memory": {
+    "total": "134160654336"
+  },
+  "cpu": {
+    "count": 24,
+    "countLogical": 48
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA GeForce RTX 4080",
+      "memoryTotal": "17171480576",
+      "cudaCores": 9728,
+      "architecture": "Ada"
+    }
+  ],
+  "cudaVersion": "12.8"
+}

@@ -17,14 +17,16 @@ def MakeGripperFrames(X_WG, t0=0):
     # Set the timing
     times = {"initial": t0}
     X_GinitialGprepick = X_WG["initial"].inverse() @ X_WG["prepick"]
-    times["prepick"] = times["initial"] + 2 * np.linalg.norm(
+    times["prepick"] = times["initial"] + np.linalg.norm(
         X_GinitialGprepick.translation()
     )
-    times["pick_start"] = times["prepick"] + 1.0
-    times["pick_end"] = times["pick_start"] + 1.0
+    times["pick_start"] = times["prepick"] + 0.5
+    # times["pick_end"] = times["pick_start"] + 1.0
+    times["pick_end"] = 2.5
     X_WG["pick_start"] = X_WG["pick"]
     X_WG["pick_end"] = X_WG["pick"]
-    times["postpick"] = times["pick_end"] + 1.0
+    # times["postpick"] = times["pick_end"] + 1.0
+    times["postpick"] = 3
     X_WG["postpick"] = RigidTransform(RotationMatrix.MakeXRotation(-np.pi / 2), [0, 0, 0.7])
     times["end"] = times["postpick"] + 10.0
     X_WG["end"] = X_WG["postpick"]
@@ -111,7 +113,7 @@ class GraspPlanner(LeafSystem):
         times = context.get_abstract_state(int(self._times_index)).get_value()
         if mode == PlannerState.WAIT:
             # Wait for some amount of time for the objects to settle down
-            if context.get_time() - times["initial"] > 1.0:
+            if context.get_time() - times["initial"] > 0.5:
                 self.Plan(context, state)
             return
 
@@ -128,11 +130,10 @@ class GraspPlanner(LeafSystem):
         state.get_mutable_abstract_state(int(self._mode_index)).set_value(
             PlannerState.PICK
         )
-        X_G["place"] = RigidTransform([0.5, 0.5, 0.3])
         X_G, times = MakeGripperFrames(X_G, t0=context.get_time())
-        print(
-            f"Planned {times['postpick'] - times['initial']} s trajectory at time {context.get_time()}"
-        )
+        # print(
+        #     f"Planned {times['postpick'] - times['initial']} s trajectory at time {context.get_time()}"
+        # )
         traj_X_G = MakeGripperPoseTrajectory(X_G, times)
         traj_wsg_command = MakeGripperCommandTrajectory(times)
 

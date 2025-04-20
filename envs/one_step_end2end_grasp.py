@@ -1,4 +1,6 @@
 from typing import Callable
+import itertools
+import warnings
 
 import gymnasium as gym
 import numpy as np
@@ -11,6 +13,7 @@ from pydrake.geometry import (
     DepthRenderCamera,
     MeshcatVisualizer,
     RenderCameraCore,
+    SourceId
 )
 from pydrake.gym import DrakeGymEnv
 from pydrake.manipulation import SchunkWsgPositionController
@@ -57,7 +60,10 @@ class ActionToSE3(LeafSystem):
 
     def CalcOutput(self, context, output):
         x = self.get_input_port(0).Eval(context)
-        q = x[:4] / np.linalg.norm(x[:4])
+        if np.linalg.norm(x[:4]) >= 0.01:
+            q = x[:4] / np.linalg.norm(x[:4])
+        else:
+            q = np.array([1, 0, 0, 0])
         output.set_value((0, RigidTransform(Quaternion(q), x[4:])))
 
 
@@ -70,8 +76,7 @@ class PointCloudMerger(LeafSystem):
         self.DeclareAbstractInputPort("cloud2", model_point_cloud)
         self._crop_lower = [-0.2, -0.2, 0.05]
         self._crop_upper = [0.2, 0.2, 0.25]
-
-        port = self.DeclareAbstractOutputPort(
+        self.DeclareAbstractOutputPort(
             "cloud", lambda: model_point_cloud, self.CalcOutput
         )
 
@@ -105,7 +110,7 @@ gym_time_step = 0.05
 controller_time_step = 0.01
 gym_time_limit = 5
 drake_contact_models = ["point", "hydroelastic_with_fallback"]
-contact_model = drake_contact_models[1]
+contact_model = drake_contact_models[0]
 drake_contact_approximations = ["sap", "tamsi", "similar", "lagged"]
 contact_approximation = drake_contact_approximations[0]
 
@@ -240,7 +245,7 @@ def setup(meshcat=None, time_limit=5, debug=False, obs_noise=False):
             object_state = self.get_input_port(0).Eval(context)
             gripper_state = self.get_input_port(1).Eval(context)
             cost = np.linalg.norm(object_state[4:7] - gripper_state[:3]) ** 2
-            reward = 10 if time >= 1 and object_state[6] >= 0.3 else 1
+            reward = 100 if time >= 1 and object_state[6] >= 0.3 else 1
             output[0] = reward - cost
 
     reward = builder.AddSystem(RewardSystem())
@@ -278,23 +283,18 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
     class ObservationPublisher(LeafSystem):
         def __init__(self, noise=False):
             LeafSystem.__init__(self)
-            self.DeclareAbstractInputPort("image0", AbstractValue.Make(ImageDepth32F()))
             self.DeclareAbstractInputPort("cloud", AbstractValue.Make(PointCloud()))
             self.DeclareVectorOutputPort("observations", cloud_size * 3, self.CalcObs)
             self.noise = noise
 
         def CalcObs(self, context, output):
-            image0 = self.get_input_port(0).Eval(context)
-            cloud = self.get_input_port(1).Eval(context)
+            cloud = self.get_input_port(0).Eval(context)
             cloud.resize(cloud_size)
             output.SetFromVector(np.nan_to_num(cloud.xyzs().reshape(-1)))
 
     obs_pub = builder.AddSystem(ObservationPublisher(noise=obs_noise))
-    builder.Connect(
-        diagram.GetOutputPort("camera0_depth_image"), obs_pub.get_input_port(0)
-    )
-    builder.Connect(merger.get_output_port(0), obs_pub.get_input_port(1))
-    builder.ExportOutput(obs_pub.get_output_port(), "observations")
+    builder.Connect(merger.get_output_port(0), obs_pub.get_input_port(0))
+    builder.ExportOutput(obs_pub.get_output_port(0), "observations")
     builder.ExportOutput(diagram.GetOutputPort("reward"), "reward")
     builder.ExportInput(diagram.GetInputPort("actions"), "actions")
 
@@ -306,25 +306,26 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
         plant = diagram.GetSubsystemByName("plant")
         plant_context = plant.GetMyContextFromRoot(context)
 
-        scene_graph = diagram.GetSubsystemByName("scene_graph")
-        scene_graph_context = scene_graph.GetMyContextFromRoot(context)
-        query_object = scene_graph.get_query_output_port().Eval(scene_graph_context)
-        wsg = plant.GetBodyByName("body")
-        floor = plant.GetBodyByName("box")
-        gids_wsg = plant.GetCollisionGeometriesForBody(wsg)
-        gids_floor = plant.GetCollisionGeometriesForBody(floor)
-        for pair in query_object.ComputePointPairPenetration():
-            if (pair.id_A in gids_wsg and pair.id_B in gids_floor) or (
-                pair.id_B in gids_wsg and pair.id_A in gids_floor
-            ):
-                print("Collision between floor and wsg detected!")
-                return EventStatus.ReachedTermination(
-                    diagram, "Collision between floor and wsg detected!"
-                )
-
+        # scene_graph = diagram.GetSubsystemByName("scene_graph")
+        # scene_graph_context = scene_graph.GetMyContextFromRoot(context)
+        # query_object = scene_graph.get_query_output_port().Eval(scene_graph_context)
+        # wsg = [plant.GetBodyByName("body"), plant.GetBodyByName("left_finger"), plant.GetBodyByName("right_finger")]
+        # gids_wsg = list(itertools.chain.from_iterable([plant.GetCollisionGeometriesForBody(x) for x in wsg]))
+        # floor = plant.GetBodyByName("box")
+        # gids_floor = plant.GetCollisionGeometriesForBody(floor)
+        # for pair in query_object.ComputePointPairPenetration():
+        #     if (pair.id_A in gids_wsg and pair.id_B in gids_floor) or (
+        #         pair.id_B in gids_wsg and pair.id_A in gids_floor
+        #     ):
+        #         # print(f"Penetration depth (betwen wsg and floor) = {pair.depth}")
+        #         if pair.depth > 1e-2:
+        #             return EventStatus.ReachedTermination(
+        #                 diagram, "Collision between floor and wsg detected!"
+        #             )
+        
         obj_state = plant.GetOutputPort("004_sugar_box_state").Eval(plant_context)
-        if obj_state[6] < -0.01:
-            print("object falls below 0")
+        if obj_state[6] < -0.025:
+            # print("object falls below 0")
             return EventStatus.ReachedTermination(diagram, "object falls below 0")
         if context.get_time() > time_limit:
             return EventStatus.ReachedTermination(diagram, "time limit")
@@ -335,18 +336,18 @@ def make_sim(meshcat=None, time_limit=5, debug=False, obs_noise=False):
     if debug:
         import pydot
 
-        pydot.graph_from_dot_data(diagram.GetGraphvizString(max_depth=2))[0].write_png(
+        pydot.graph_from_dot_data(final_diagram.GetGraphvizString(max_depth=2))[0].write_png(
             "images/OneStepEnd2EndGrasp-v0-diagram.png"
         )
 
     return simulator
 
 
-def reset_handler(simulator, diagram_context, seed):
+def reset_handler(simulator, context, seed):
     rng = np.random.default_rng(seed)
     diagram = simulator.get_system()
     system = diagram.GetSubsystemByName("system")
-    system_context = diagram.GetMutableSubsystemContext(system, diagram_context)
+    system_context = diagram.GetMutableSubsystemContext(system, context)
     plant = system.GetSubsystemByName("plant")
     plant_context = system.GetMutableSubsystemContext(plant, system_context)
     sphere = plant.GetModelInstanceByName("sphere")
@@ -411,12 +412,26 @@ class OneStepEnd2EndGrasp(DrakeGymEnv):
         context = self.simulator.get_context()
         time = context.get_time()
         self.action_port.FixValue(context, action)
-        if time < 1:
-            status = self.simulator.AdvanceTo(1)
-        else:
-            status = self.simulator.AdvanceTo(time + self.time_step)
-
         truncated = False
+
+        prev_observation = self.observation_port.Eval(context)
+        try:
+            if time < 0.5:
+                status = self.simulator.AdvanceTo(0.5)
+            elif time < 2:
+                status = self.simulator.AdvanceTo(2)
+            else:
+                status = self.simulator.AdvanceTo(3.1)
+        except RuntimeError as e:
+            warnings.warn("Calling Done after catching RuntimeError")
+            warnings.warn(e.args[0])
+            truncated = True
+            terminated = False
+            reward = 0
+            info = dict()
+            
+            return prev_observation, reward, terminated, truncated, info
+
         observation = self.observation_port.Eval(context)
         reward = self.reward(self.simulator.get_system(), context)
         terminated = not truncated and (
@@ -426,16 +441,17 @@ class OneStepEnd2EndGrasp(DrakeGymEnv):
 
         return observation, reward, terminated, truncated, info
 
-    def reset(self, *, seed=None, options=None):
-        context = self.simulator.get_mutable_context()
-        context.SetTime(0)
-        self.simulator.Initialize()
-        self.simulator.get_system().SetDefaultContext(context)
-        self.reset_handler(self.simulator, context, seed)
-        observations = self.observation_port.Eval(context)
-        info = self.info_handler(self.simulator)
+    # def reset(self, *, seed=None, options=None):
+    #     super().reset(seed=seed)
+    #     context = self.simulator.get_mutable_context()
+    #     context.SetTime(0)
+    #     self.simulator.Initialize()
+    #     self.simulator.get_system().SetDefaultContext(context)
+    #     self.reset_handler(self.simulator, context, seed)
+    #     observations = self.observation_port.Eval(context)
+    #     info = self.info_handler(self.simulator)
 
-        return observations, info
+    #     return observations, info
 
 
 gym.envs.register(
@@ -450,8 +466,8 @@ def make_env(meshcat=None, time_limit=gym_time_limit, debug=False, obs_noise=Fal
 
     # Define action space
     action_space = gym.spaces.Box(
-        low=np.asarray([-1, -1, -1, -1, -0.5, -0.5, 0]),
-        high=np.asarray([1, 1, 1, 1, 0.5, 0.5, 0.5]),
+        low=np.asarray([-1, -1, -1, -1, -0.2, -0.2, 0.05]),
+        high=np.asarray([1, 1, 1, 1, 0.2, 0.2, 0.25]),
         dtype=np.float64,
     )
 

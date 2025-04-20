@@ -1,0 +1,68 @@
+INFO:drake:Meshcat listening for connections at http://localhost:7000
+WARNING:drake:warning: Warning: In vtkGLTFDocumentLoaderInternals.cxx, line 1354: vtkGLTFDocumentLoader (0x57c6ba4e1fc0): glTF extension KHR_texture_basisu is used in this model, but not supported by this loader. The extension will be ignored.
+/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/stable_baselines3/common/env_checker.py:462: UserWarning: We recommend you to use a symmetric and normalized Box action space (range=[-1, 1]) cf. https://stable-baselines3.readthedocs.io/en/master/guide/rl_tips.html
+  warnings.warn(
+/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/stable_baselines3/common/env_checker.py:473: UserWarning: Your action space has dtype float64, we recommend using np.float32 to avoid cast errors.
+  warnings.warn(
+Creating PPO model...
+Using cpu device
+Wrapping the env with a `Monitor` wrapper
+Wrapping the env in a DummyVecEnv.
+Total number of parameters: 392975
+Logging to runs/0419/PPO_30
+Traceback (most recent call last):
+  File "/home/yyan-admin/yl43338/residual_grasping/train_one_step_e2e.py", line 126, in <module>
+    sys.exit(main())
+  File "/home/yyan-admin/yl43338/residual_grasping/train_one_step_e2e.py", line 113, in main
+    model.learn(
+  File "/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/stable_baselines3/ppo/ppo.py", line 311, in learn
+    return super().learn(
+  File "/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/stable_baselines3/common/on_policy_algorithm.py", line 324, in learn
+    continue_training = self.collect_rollouts(self.env, callback, self.rollout_buffer, n_rollout_steps=self.n_steps)
+  File "/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/stable_baselines3/common/on_policy_algorithm.py", line 218, in collect_rollouts
+    new_obs, rewards, dones, infos = env.step(clipped_actions)
+  File "/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/stable_baselines3/common/vec_env/base_vec_env.py", line 222, in step
+    return self.step_wait()
+  File "/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/stable_baselines3/common/vec_env/dummy_vec_env.py", line 59, in step_wait
+    obs, self.buf_rews[env_idx], terminated, truncated, self.buf_infos[env_idx] = self.envs[env_idx].step(  # type: ignore[assignment]
+  File "/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/stable_baselines3/common/monitor.py", line 94, in step
+    observation, reward, terminated, truncated, info = self.env.step(action)
+  File "/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/gymnasium/wrappers/common.py", line 393, in step
+    return super().step(action)
+  File "/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/gymnasium/core.py", line 327, in step
+    return self.env.step(action)
+  File "/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/gymnasium/wrappers/common.py", line 285, in step
+    return self.env.step(action)
+  File "/home/yyan-admin/yl43338/residual_grasping/envs/one_step_end2end_grasp.py", line 421, in step
+    status = self.simulator.AdvanceTo(4)
+  File "/home/yyan-admin/yl43338/residual_grasping/drivers.py", line 54, in CalcPoseToPosition
+    def CalcPoseToPosition(self, context, output):
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/yyan-admin/yl43338/residual_grasping/train_one_step_e2e.py", line 126, in <module>
+    sys.exit(main())
+  File "/home/yyan-admin/yl43338/residual_grasping/train_one_step_e2e.py", line 113, in main
+    model.learn(
+  File "/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/stable_baselines3/ppo/ppo.py", line 311, in learn
+    return super().learn(
+  File "/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/stable_baselines3/common/on_policy_algorithm.py", line 324, in learn
+    continue_training = self.collect_rollouts(self.env, callback, self.rollout_buffer, n_rollout_steps=self.n_steps)
+  File "/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/stable_baselines3/common/on_policy_algorithm.py", line 218, in collect_rollouts
+    new_obs, rewards, dones, infos = env.step(clipped_actions)
+  File "/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/stable_baselines3/common/vec_env/base_vec_env.py", line 222, in step
+    return self.step_wait()
+  File "/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/stable_baselines3/common/vec_env/dummy_vec_env.py", line 59, in step_wait
+    obs, self.buf_rews[env_idx], terminated, truncated, self.buf_infos[env_idx] = self.envs[env_idx].step(  # type: ignore[assignment]
+  File "/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/stable_baselines3/common/monitor.py", line 94, in step
+    observation, reward, terminated, truncated, info = self.env.step(action)
+  File "/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/gymnasium/wrappers/common.py", line 393, in step
+    return super().step(action)
+  File "/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/gymnasium/core.py", line 327, in step
+    return self.env.step(action)
+  File "/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/gymnasium/wrappers/common.py", line 285, in step
+    return self.env.step(action)
+  File "/home/yyan-admin/yl43338/residual_grasping/envs/one_step_end2end_grasp.py", line 421, in step
+    status = self.simulator.AdvanceTo(4)
+  File "/home/yyan-admin/yl43338/residual_grasping/drivers.py", line 54, in CalcPoseToPosition
+    def CalcPoseToPosition(self, context, output):
+KeyboardInterrupt

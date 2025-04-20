@@ -1,0 +1,174 @@
+_current_progress_remaining:
+    value: 1
+_custom_logger:
+    value: "False"
+_episode_num:
+    value: 0
+_last_episode_starts:
+    value: |-
+        [ True  True  True  True  True  True  True  True  True  True  True  True
+          True  True  True  True  True  True  True  True  True  True  True  True
+          True  True  True  True  True  True  True  True  True  True  True  True]
+_last_obs:
+    value: |-
+        [[ 0.          0.          0.         ...  0.          0.
+           0.        ]
+         [ 0.03061293  0.03198892  0.01950267 ...  0.          0.
+           0.        ]
+         [ 0.          0.          0.         ...  0.          0.
+           0.        ]
+         ...
+         [-0.00492451 -0.00811863 -0.0100185  ...  0.          0.
+           0.        ]
+         [ 0.          0.          0.         ...  0.          0.
+           0.        ]
+         [ 0.          0.          0.         ...  0.          0.
+           0.        ]]
+_last_original_obs:
+    value: None
+_logger:
+    value: <stable_baselines3.common.logger.Logger object at 0x770bda1a1840>
+_n_updates:
+    value: 0
+_num_timesteps_at_start:
+    value: 0
+_stats_window_size:
+    value: 100
+_total_timesteps:
+    value: 500000
+_vec_normalize_env:
+    value: None
+_wandb:
+    value:
+        cli_version: 0.19.9
+        code_path: code/train_one_step_e2e.py
+        m: []
+        python_version: 3.10.12
+        t:
+            "1":
+                - 1
+                - 55
+            "2":
+                - 1
+                - 55
+            "3":
+                - 16
+                - 22
+                - 23
+                - 35
+                - 55
+            "4": 3.10.12
+            "5": 0.19.9
+            "8":
+                - 5
+            "12": 0.19.9
+            "13": linux-x86_64
+action_noise:
+    value: None
+action_space:
+    value: Box([-1.   -1.   -1.   -1.   -0.2  -0.2   0.05], [1.   1.   1.   1.   0.2  0.2  0.25], (7,), float64)
+algo:
+    value: PPO
+batch_size:
+    value: 64
+clip_range:
+    value: <function get_schedule_fn.<locals>.<lambda> at 0x770bda1ccdc0>
+clip_range_vf:
+    value: None
+device:
+    value: cpu
+ent_coef:
+    value: 0
+env:
+    value: <stable_baselines3.common.vec_env.subproc_vec_env.SubprocVecEnv object at 0x770c0eacef20>
+env_name:
+    value: OneStepEnd2EndGrasp-v0
+env_time_limit:
+    value: 3
+ep_info_buffer:
+    value: deque([], maxlen=100)
+ep_success_buffer:
+    value: deque([], maxlen=100)
+gae_lambda:
+    value: 0.95
+gamma:
+    value: 0.99
+learning_rate:
+    value: 0.0003
+lr_schedule:
+    value: <function get_schedule_fn.<locals>.<lambda> at 0x770c00162950>
+max_grad_norm:
+    value: 0.5
+n_envs:
+    value: 36
+n_epochs:
+    value: 10
+n_steps:
+    value: 2048
+normalize_advantage:
+    value: "True"
+num_timesteps:
+    value: 0
+observation_space:
+    value: Box(-1.0, 1.0, (3000,), float64)
+observations:
+    value: state
+policy:
+    value: |-
+        ActorCriticPolicy(
+          (features_extractor): FlattenExtractor(
+            (flatten): Flatten(start_dim=1, end_dim=-1)
+          )
+          (pi_features_extractor): FlattenExtractor(
+            (flatten): Flatten(start_dim=1, end_dim=-1)
+          )
+          (vf_features_extractor): FlattenExtractor(
+            (flatten): Flatten(start_dim=1, end_dim=-1)
+          )
+          (mlp_extractor): MlpExtractor(
+            (policy_net): Sequential(
+              (0): Linear(in_features=3000, out_features=64, bias=True)
+              (1): Tanh()
+              (2): Linear(in_features=64, out_features=64, bias=True)
+              (3): Tanh()
+            )
+            (value_net): Sequential(
+              (0): Linear(in_features=3000, out_features=64, bias=True)
+              (1): Tanh()
+              (2): Linear(in_features=64, out_features=64, bias=True)
+              (3): Tanh()
+            )
+          )
+          (action_net): Linear(in_features=64, out_features=7, bias=True)
+          (value_net): Linear(in_features=64, out_features=1, bias=True)
+        )
+policy_class:
+    value: <class 'stable_baselines3.common.policies.ActorCriticPolicy'>
+policy_kwargs:
+    value: '{}'
+policy_type:
+    value: MlpPolicy
+rollout_buffer:
+    value: <stable_baselines3.common.buffers.RolloutBuffer object at 0x770c0eae5630>
+rollout_buffer_class:
+    value: <class 'stable_baselines3.common.buffers.RolloutBuffer'>
+rollout_buffer_kwargs:
+    value: '{}'
+sde_sample_freq:
+    value: -1
+seed:
+    value: None
+start_time:
+    value: 1745167696997962385
+target_kl:
+    value: None
+tensorboard_log:
+    value: runs/0420
+total_timesteps:
+    value: 500000
+use_sde:
+    value: "False"
+verbose:
+    value: 1
+vf_coef:
+    value: 0.5

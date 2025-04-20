@@ -1,0 +1,29 @@
+INFO:drake:Meshcat listening for connections at http://localhost:7000
+WARNING:drake:warning: Warning: In vtkGLTFDocumentLoaderInternals.cxx, line 1354: vtkGLTFDocumentLoader (0x62252e09df40): glTF extension KHR_texture_basisu is used in this model, but not supported by this loader. The extension will be ignored.
+/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/stable_baselines3/common/env_checker.py:462: UserWarning: We recommend you to use a symmetric and normalized Box action space (range=[-1, 1]) cf. https://stable-baselines3.readthedocs.io/en/master/guide/rl_tips.html
+  warnings.warn(
+/home/yyan-admin/yl43338/env/lib/python3.10/site-packages/stable_baselines3/common/env_checker.py:473: UserWarning: Your action space has dtype float64, we recommend using np.float32 to avoid cast errors.
+  warnings.warn(
+0.0 0.6731766312434407
+0.0 0.4820865431250053
+1.0 0.9370960500986942
+4.0 0.39184522725367144
+5.1 0.39184522725367144
+5.1 0.39184522725367144
+5.1 0.39184522725367144
+5.1 0.39184522725367144
+5.1 0.39184522725367144
+5.1 0.39184522725367144
+5.1 0.39184522725367144
+Traceback (most recent call last):
+  File "/home/yyan-admin/yl43338/residual_grasping/train.py", line 138, in <module>
+    sys.exit(main())
+  File "/home/yyan-admin/yl43338/residual_grasping/train.py", line 74, in main
+    input("Open meshcat (optional). Press Enter to continue...")
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/yyan-admin/yl43338/residual_grasping/train.py", line 138, in <module>
+    sys.exit(main())
+  File "/home/yyan-admin/yl43338/residual_grasping/train.py", line 74, in main
+    input("Open meshcat (optional). Press Enter to continue...")
+KeyboardInterrupt
