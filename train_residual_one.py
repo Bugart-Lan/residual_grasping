@@ -31,7 +31,7 @@ def main():
 
     config = {
         "policy_type": "MlpPolicy",
-        "total_timesteps": 5e3 if not args.test else 5,
+        "total_timesteps": 5e4 if not args.test else 5,
         "env_name": "ResidualGraspOne-v0",
         "env_time_limit": 3 if not args.test else 0.5,
         "observations": "state",
@@ -51,7 +51,7 @@ def main():
     zip = "data/residual_grasp_one.zip"
 
     # num_cpu = int(cpu_count() / 4)
-    num_cpu = 24
+    num_cpu = 40
     if args.train_single_env:
         meshcat = StartMeshcat()
         env = gym.make(
@@ -76,7 +76,7 @@ def main():
         env = make_vec_env(
             make_env,
             n_envs=num_cpu,
-            seed=0,
+            seed=1,
             vec_env_cls=SubprocVecEnv,
         )
 
@@ -93,22 +93,27 @@ def main():
         )
     elif os.path.exists(zip):
         print(f"Loading model @ {zip}")
-        model = DDPG.load(
+        model = SAC.load(
             zip,
             env,
+            # learning_rate=1e-4,
+            # buffer_size=int(1e6),
+            # batch_size=256,
+            # tau=0.01,
+            # policy_kwargs=policy_kwargs,
             verbose=1,
             tensorboard_log=args.log_path or f"runs/{run.id}",
             # device="cpu",
         )
     else:
-        print("Creating SAC model...")
-        model = TD3(
+        print("Creating PPO model...")
+        model = SAC(
             config["policy_type"],
             env,
-            learning_rate=1e-4,
-            buffer_size=int(1e6),
-            batch_size=256,
-            tau=0.01,
+            # learning_rate=1e-4,
+            # buffer_size=int(1e6),
+            # batch_size=256,
+            # tau=0.01,
             # ent_coef="auto",
             # target_entropy=-np.prod(env.action_space.shape),
             policy_kwargs=policy_kwargs,

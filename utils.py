@@ -152,7 +152,7 @@ class PointCloudMerger(LeafSystem):
         self.DeclareAbstractInputPort("cloud0", model_point_cloud)
         self.DeclareAbstractInputPort("cloud1", model_point_cloud)
         self.DeclareAbstractInputPort("cloud2", model_point_cloud)
-        self._crop_lower = [-0.2, -0.2, 0.05]
+        self._crop_lower = [-0.2, -0.2, 0.]
         self._crop_upper = [0.2, 0.2, 0.25]
         self.DeclareAbstractOutputPort(
             "cloud", lambda: model_point_cloud, self.CalcOutput

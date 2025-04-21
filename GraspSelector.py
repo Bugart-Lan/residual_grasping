@@ -243,7 +243,7 @@ class GraspSelector(LeafSystem):
         )
         port.disable_caching_by_default()
 
-        self._crop_lower = [-0.2, -0.2, 0.05]
+        self._crop_lower = [-0.2, -0.2, 0.]
         self._crop_upper = [0.2, 0.2, 0.25]
 
         self._internal_model = make_internal_model(meshcat)

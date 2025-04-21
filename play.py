@@ -3,7 +3,7 @@ import numpy as np
 import torch
 
 from pydrake.all import StartMeshcat
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, TD3
 
 # import manipulation.envs.box_flipup
 import envs.floating_joint

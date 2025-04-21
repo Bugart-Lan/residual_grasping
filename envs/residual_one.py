@@ -1,10 +1,11 @@
 from math import isfinite
-from typing import Callable
+from typing import Callable, Optional
 
 import gymnasium as gym
 import numpy as np
 import warnings
 
+from pydrake.common import RandomGenerator
 from pydrake.common.eigen_geometry import Quaternion
 from pydrake.common.value import AbstractValue
 from pydrake.geometry import (
@@ -16,7 +17,7 @@ from pydrake.geometry import (
 )
 from pydrake.gym import DrakeGymEnv
 from pydrake.manipulation import SchunkWsgPositionController
-from pydrake.math import RigidTransform, RotationMatrix
+from pydrake.math import RigidTransform, RollPitchYaw, RotationMatrix
 from pydrake.multibody.parsing import Parser
 from pydrake.multibody.plant import (
     AddMultibodyPlant,
@@ -53,7 +54,6 @@ class SE3Adder(LeafSystem):
 
     def CalcOutput(self, context, output):
         r = self.get_input_port(0).Eval(context)
-        # print("Action =", r)
         cost, transform = self.get_input_port(1).Eval(context)
         if not np.isfinite(cost):
             transform = RigidTransform.Identity()
@@ -75,31 +75,31 @@ OBJECTS = {
         "id": 0,
         "name": "004_sugar_box",
         "base": "base_link_sugar",
-        "url": "package://manipulation/hydro/004_sugar_box.sdf",
+        "url": "package://drake_models/ycb/004_sugar_box.sdf",
     },
     "soup": {
         "id": 1,
         "name": "005_tomato_soup_can",
         "base": "base_link_soup",
-        "url": "package://manipulation/hydro/005_tomato_soup_can.sdf",
+        "url": "package://drake_models/ycb/005_tomato_soup_can.sdf",
     },
     "mustard": {
         "id": 2,
         "name": "006_mustard_bottle",
         "base": "base_link_mustard",
-        "url": "package://manipulation/hydro/006_mustard_bottle.sdf",
+        "url": "package://drake_models/ycb/006_mustard_bottle.sdf",
     },
     "gelatin": {
         "id": 3,
         "name": "009_gelatin_box",
         "base": "base_link_gelatin",
-        "url": "package://manipulation/hydro/009_gelatin_box.sdf",
+        "url": "package://drake_models/ycb/009_gelatin_box.sdf",
     },
     "meat": {
         "id": 4,
         "name": "010_potted_meat_can",
         "base": "base_link_meat",
-        "url": "package://manipulation/hydro/010_potted_meat_can.sdf",
+        "url": "package://drake_models/ycb/010_potted_meat_can.sdf",
     },
 }
 height_threshold = 0.25  # z-coord higher than this threshold is considered as a success
@@ -122,7 +122,7 @@ gym_time_step = 0.1
 controller_time_step = 0.01
 gym_time_limit = 5
 drake_contact_models = ["point", "hydroelastic_with_fallback"]
-contact_model = drake_contact_models[1]
+contact_model = drake_contact_models[0]
 drake_contact_approximations = ["sap", "tamsi", "similar", "lagged"]
 contact_approximation = drake_contact_approximations[0]
 
@@ -148,6 +148,7 @@ def reset_all_objects(plant, context=None, active="sugar", rng=None):
             z = rng.random() * 0.1 + 0.15
             transform = RigidTransform(RotationMatrix(Quaternion(q)), [x, y, z])
         else:
+            # TODO: Make it don't start at the same location
             transform = RigidTransform([1, 1, -1])
 
         if plant.is_finalized():
@@ -163,6 +164,7 @@ def load_scenario(meshcat=None, obj_name="sugar", rng=None):
         time_step=sim_time_step,
         contact_model=contact_model,
         discrete_contact_approximation=contact_approximation,
+        penetration_allowance=1e-4
     )
     plant, scene_graph = AddMultibodyPlant(multibody_plant_config, builder)
     parser = Parser(plant)
@@ -217,6 +219,9 @@ def load_scenario(meshcat=None, obj_name="sugar", rng=None):
 
     if meshcat:
         MeshcatVisualizer.AddToBuilder(builder, scene_graph, meshcat)
+        AddFrameTriadIllustration(
+            scene_graph=scene_graph, frame=plant.GetFrameByName("sphere")
+        )
         AddFrameTriadIllustration(
             scene_graph=scene_graph, frame=plant.GetFrameByName("body")
         )
@@ -352,11 +357,6 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
                 if self.noise:
                     pass
 
-                assert np.all(
-                    np.isfinite(
-                        np.concatenate([q, t, np.nan_to_num(cloud.xyzs().reshape(-1))])
-                    )
-                )
                 output.SetFromVector(
                     np.concatenate([q, t, np.nan_to_num(cloud.xyzs().reshape(-1))])
                 )
@@ -384,22 +384,22 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
             LeafSystem.__init__(self)
             self.DeclareVectorInputPort("object_state", 13)
             self.DeclareVectorInputPort("gripper_state", 12)
+            self.DeclareVectorInputPort("actions", 7)
             self.DeclareVectorOutputPort("reward", 1, self.CalcReward)
 
         def CalcReward(self, context, output):
             time = context.get_time()
             object_state = self.get_input_port(0).Eval(context)
             gripper_state = self.get_input_port(1).Eval(context)
-            # cost = np.linalg.norm(object_state[4:7] - gripper_state[:3]) ** 2
-            reward = 100 if object_state[6] >= height_threshold else 1
-            if reward > 1:
-                print("Reward =", reward)
-            if time > wait_time + 0.1:
-                # print(time, "reward")
+            actions = self.get_input_port(2).Eval(context) 
+            z = RotationMatrix(RollPitchYaw(gripper_state[5:2:-1])).matrix()[:, 2]
+            tar = gripper_state[0:3] - 0.2 * z
+            cost = np.linalg.norm(actions)
+            if time < 3:
+                cost += np.linalg.norm(tar - object_state[4:7])
+            # print(f"@ t = {time}, cost = {cost}")                cost += np.linalg.norm(tar - object_state[4:7])
+
                 output[0] = reward
-            else:
-                # print(time, "no reward")
-                output[0] = 0
 
     reward = builder.AddSystem(RewardSystem())
     builder.Connect(
@@ -410,6 +410,7 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
         scenario.GetOutputPort("sphere_state"),
         reward.get_input_port(1),
     )
+    builder.ConnectInput("actions", reward.get_input_port(2))
     builder.ExportOutput(reward.get_output_port(), "reward")
 
     diagram = builder.Build()
@@ -469,7 +470,7 @@ def reset_handler(simulator, diagram_context, seed):
     pose = plant.EvalBodyPoseInWorld(
         plant_context, plant.GetBodyByName(OBJECTS[active_object]["base"])
     )
-    print(f"Active object = {active_object}, z-position = {pose.translation()[2]}")
+    # print(f"Active object = {active_object}, z-position = {pose.translation()[2]}")
 
 
 def info_handler(simulator: Simulator) -> dict:
@@ -508,15 +509,20 @@ class CustomDrakeGymEnv(DrakeGymEnv):
     def step(self, action):
         context = self.simulator.get_context()
         time = context.get_time()
+        print(f"Action @ t = {time}: {action}")
         self.action_port.FixValue(context, action)
         truncated = False
 
         prev_observation = self.observation_port.Eval(context)
+        total_reward = 0
         try:
             if time < self._wait_time:
                 status = self.simulator.AdvanceTo(self._wait_time)
             else:
+                status = self.simulator.AdvanceTo(2)
+                total_reward += self.reward(self.simulator.get_system(), context)
                 status = self.simulator.AdvanceTo(3.1)
+                total_reward += self.reward(self.simulator.get_system(), context)
         except RuntimeError as e:
             warnings.warn("Calling Done after catching RuntimeError")
             warnings.warn(e.args[0])
@@ -528,15 +534,31 @@ class CustomDrakeGymEnv(DrakeGymEnv):
             return prev_observation, reward, terminated, truncated, info
 
         observation = self.observation_port.Eval(context)
-        reward = self.reward(self.simulator.get_system(), context)
+        # reward = self.reward(self.simulator.get_system(), context)
         terminated = not truncated and (
             status.reason() == SimulatorStatus.ReturnReason.kReachedTerminationCondition
         )
         info = self.info_handler(self.simulator)
-        assert np.all(np.isfinite(observation))
-        assert np.isfinite(reward)
+        return observation, total_reward, terminated, truncated, info
+    
+    def reset(self, *,
+              seed: Optional[int] = None,
+              options: Optional[dict] = None):
+        observations, info = super().reset(seed=seed, options=options)
+        try:
+            context = self.simulator.get_context()
+            self.action_port.FixValue(context, np.zeros(7))
+            self.simulator.AdvanceTo(self._wait_time)
+        except RuntimeError as e:
+            warnings.warn("Calling Done after catching RuntimeError (reset)")
+            warnings.warn(e.args[0])
+            return observations, dict()
 
-        return observation, reward, terminated, truncated, info
+        context = self.simulator.get_mutable_context()
+        observations = self.observation_port.Eval(context)
+        info = self.info_handler(self.simulator)
+
+        return observations, info
 
 
 def DrakeResidualGraspOneStepEnv(
@@ -544,17 +566,13 @@ def DrakeResidualGraspOneStepEnv(
 ):
     wait_time = 0.8
     simulator = make_sim(
-        meshcat=meshcat,
-        time_limit=time_limit,
-        wait_time=wait_time,
-        debug=debug,
-        obs_noise=obs_noise,
+        meshcat=meshcat, time_limit=time_limit, wait_time=wait_time, debug=debug, obs_noise=obs_noise
     )
 
     # Define action space
     action_space = gym.spaces.Box(
-        low=np.asarray([0, 0, 0, 0, -0.1, -0.1, -0.1]),
-        high=np.asarray([0, 0, 0, 0, 0.1, 0.1, 0.1]),
+        low=np.asarray([-0.01, -0.01, -0.01, -0.01, -0.1, -0.1, -0.1]),
+        high=np.asarray([0.01, 0.01, 0.01, 0.01, 0.1, 0.1, 0.1]),
         dtype=np.float64,
     )
 
@@ -573,7 +591,7 @@ def DrakeResidualGraspOneStepEnv(
         observation_port_id="observations",
         reset_handler=reset_handler,
         info_handler=info_handler,
-        wait_time=wait_time,
+        wait_time=wait_time
     )
 
     return env

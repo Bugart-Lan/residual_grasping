@@ -21,7 +21,7 @@ def MakeGripperFrames(X_WG, t0=0):
     #     X_GinitialGprepick.translation()
     # )
     times["prepick"] = times["initial"] + 0.8
-    times["pick_start"] = times["prepick"] + 0.4
+    times["pick_start"] = 2 # times["prepick"] + 0.4
     # times["pick_end"] = times["pick_start"] + 1.0
     times["pick_end"] = times["pick_start"] + 0.2
     X_WG["pick_start"] = X_WG["pick"]
