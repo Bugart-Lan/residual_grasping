@@ -80,11 +80,7 @@ def main():
             vec_env_cls=SubprocVecEnv,
         )
 
-
-    policy_kwargs = {
-        "net_arch": [64, 64],
-        "activation_fn": torch.nn.ReLU
-    }
+    policy_kwargs = {"net_arch": [64, 64], "activation_fn": torch.nn.ReLU}
     if args.test:
         print("Testing mode")
         model = DDPG(
@@ -106,15 +102,15 @@ def main():
         )
     else:
         print("Creating SAC model...")
-        model = SAC(
+        model = TD3(
             config["policy_type"],
             env,
             learning_rate=1e-4,
             buffer_size=int(1e6),
             batch_size=256,
             tau=0.01,
-            ent_coef="auto",
-            target_entropy=-np.prod(env.action_space.shape),
+            # ent_coef="auto",
+            # target_entropy=-np.prod(env.action_space.shape),
             policy_kwargs=policy_kwargs,
             verbose=1,
             tensorboard_log=args.log_path or f"runs/{run.id}",

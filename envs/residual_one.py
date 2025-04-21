@@ -352,6 +352,11 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
                 if self.noise:
                     pass
 
+                assert np.all(
+                    np.isfinite(
+                        np.concatenate([q, t, np.nan_to_num(cloud.xyzs().reshape(-1))])
+                    )
+                )
                 output.SetFromVector(
                     np.concatenate([q, t, np.nan_to_num(cloud.xyzs().reshape(-1))])
                 )
@@ -539,7 +544,11 @@ def DrakeResidualGraspOneStepEnv(
 ):
     wait_time = 0.8
     simulator = make_sim(
-        meshcat=meshcat, time_limit=time_limit, wait_time=wait_time, debug=debug, obs_noise=obs_noise
+        meshcat=meshcat,
+        time_limit=time_limit,
+        wait_time=wait_time,
+        debug=debug,
+        obs_noise=obs_noise,
     )
 
     # Define action space
@@ -564,7 +573,7 @@ def DrakeResidualGraspOneStepEnv(
         observation_port_id="observations",
         reset_handler=reset_handler,
         info_handler=info_handler,
-        wait_time=wait_time
+        wait_time=wait_time,
     )
 
     return env
