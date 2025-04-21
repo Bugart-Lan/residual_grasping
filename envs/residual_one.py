@@ -53,6 +53,7 @@ class SE3Adder(LeafSystem):
 
     def CalcOutput(self, context, output):
         r = self.get_input_port(0).Eval(context)
+        # print("Action =", r)
         cost, transform = self.get_input_port(1).Eval(context)
         if not np.isfinite(cost):
             transform = RigidTransform.Identity()
@@ -101,7 +102,7 @@ OBJECTS = {
         "url": "package://manipulation/hydro/010_potted_meat_can.sdf",
     },
 }
-height_threshold = 0.3  # z-coord higher than this threshold is considered as a success
+height_threshold = 0.25  # z-coord higher than this threshold is considered as a success
 
 # Camera parameters
 width = 80
@@ -113,10 +114,10 @@ far = 10.0
 renderer = "my_renderer"
 image_size = width * height * 4
 CAMERA_INSTANCE_PREFIX = "camera"
-cloud_size = 150
+cloud_size = 400
 
 # Gym parameters
-sim_time_step = 0.001
+sim_time_step = 0.005
 gym_time_step = 0.1
 controller_time_step = 0.01
 gym_time_limit = 5
@@ -144,7 +145,7 @@ def reset_all_objects(plant, context=None, active="sugar", rng=None):
             )
             x = rng.random() * 0.1 - 0.05
             y = rng.random() * 0.1 - 0.05
-            z = rng.random() * 0.2 + 0.3
+            z = rng.random() * 0.1 + 0.15
             transform = RigidTransform(RotationMatrix(Quaternion(q)), [x, y, z])
         else:
             transform = RigidTransform([1, 1, -1])
@@ -340,7 +341,8 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
 
         def CalcObs(self, context, output):
             time = context.get_time()
-            if time > wait_time:
+            if 2 >= time >= wait_time:
+                # print(time, "obs")
                 cost, grasp = self.get_input_port(0).Eval(context)
                 q = grasp.rotation().ToQuaternion().wxyz()
                 t = grasp.translation()
@@ -354,6 +356,7 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
                     np.concatenate([q, t, np.nan_to_num(cloud.xyzs().reshape(-1))])
                 )
             else:
+                # print(time, "no obs")
                 output.SetFromVector(np.zeros(7 + 3 * cloud_size))
 
     obs_pub = builder.AddSystem(ObservationPublisher(noise=obs_noise))
@@ -382,13 +385,15 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
             time = context.get_time()
             object_state = self.get_input_port(0).Eval(context)
             gripper_state = self.get_input_port(1).Eval(context)
-            cost = np.linalg.norm(object_state[4:7] - gripper_state[:3]) ** 2
-            reward = 100 if object_state[6] >= 0.3 else 1
+            # cost = np.linalg.norm(object_state[4:7] - gripper_state[:3]) ** 2
+            reward = 100 if object_state[6] >= height_threshold else 1
             if reward > 1:
                 print("Reward =", reward)
-            if time > wait_time:
-                output[0] = reward - cost
+            if time > wait_time + 0.1:
+                # print(time, "reward")
+                output[0] = reward
             else:
+                # print(time, "no reward")
                 output[0] = 0
 
     reward = builder.AddSystem(RewardSystem())
@@ -407,14 +412,11 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
     simulator.Initialize()
 
     def monitor(context):
-        scenario_context = scenario.GetMyContextFromRoot(context)
-        obj_state = scenario.GetOutputPort("object_state").Eval(scenario_context)
-        # idx = scenario.GetOutputPort("active_obj_index").Eval(scenario_context)
-        # print(f"object #{idx} z-position = {obj_state[6]}")
-
-        if obj_state[6] < 0:
-            print("Terminal: Object falls below 0.")
-            return EventStatus.ReachedTermination(diagram, "object falls below 0")
+        # scenario_context = scenario.GetMyContextFromRoot(context)
+        # obj_state = scenario.GetOutputPort("object_state").Eval(scenario_context)
+        # if obj_state[6] < 0:
+        #     print("Terminal: Object falls below 0.")
+        #     return EventStatus.ReachedTermination(diagram, "object falls below 0")
         if context.get_time() > time_limit:
             return EventStatus.ReachedTermination(diagram, "time limit")
         return EventStatus.Succeeded()
@@ -483,6 +485,7 @@ class CustomDrakeGymEnv(DrakeGymEnv):
         observation_port_id: str = None,
         reset_handler: Callable[[Simulator, Context], None] = None,
         info_handler: Callable[[Simulator, Context], dict] = None,
+        wait_time: float = 0.5,
     ):
         super().__init__(
             simulator=simulator,
@@ -495,6 +498,7 @@ class CustomDrakeGymEnv(DrakeGymEnv):
             reset_handler=reset_handler,
             info_handler=info_handler,
         )
+        self._wait_time = wait_time
 
     def step(self, action):
         context = self.simulator.get_context()
@@ -504,8 +508,8 @@ class CustomDrakeGymEnv(DrakeGymEnv):
 
         prev_observation = self.observation_port.Eval(context)
         try:
-            if time < 0.5:
-                status = self.simulator.AdvanceTo(0.51)
+            if time < self._wait_time:
+                status = self.simulator.AdvanceTo(self._wait_time)
             else:
                 status = self.simulator.AdvanceTo(3.1)
         except RuntimeError as e:
@@ -524,6 +528,8 @@ class CustomDrakeGymEnv(DrakeGymEnv):
             status.reason() == SimulatorStatus.ReturnReason.kReachedTerminationCondition
         )
         info = self.info_handler(self.simulator)
+        assert np.all(np.isfinite(observation))
+        assert np.isfinite(reward)
 
         return observation, reward, terminated, truncated, info
 
@@ -531,8 +537,9 @@ class CustomDrakeGymEnv(DrakeGymEnv):
 def DrakeResidualGraspOneStepEnv(
     meshcat=None, time_limit=gym_time_limit, debug=False, obs_noise=False
 ):
+    wait_time = 0.8
     simulator = make_sim(
-        meshcat=meshcat, time_limit=time_limit, debug=debug, obs_noise=obs_noise
+        meshcat=meshcat, time_limit=time_limit, wait_time=wait_time, debug=debug, obs_noise=obs_noise
     )
 
     # Define action space
@@ -557,6 +564,7 @@ def DrakeResidualGraspOneStepEnv(
         observation_port_id="observations",
         reset_handler=reset_handler,
         info_handler=info_handler,
+        wait_time=wait_time
     )
 
     return env

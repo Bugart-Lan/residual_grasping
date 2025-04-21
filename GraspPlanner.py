@@ -17,18 +17,19 @@ def MakeGripperFrames(X_WG, t0=0):
     # Set the timing
     times = {"initial": t0}
     X_GinitialGprepick = X_WG["initial"].inverse() @ X_WG["prepick"]
-    times["prepick"] = times["initial"] + np.linalg.norm(
-        X_GinitialGprepick.translation()
-    )
-    times["pick_start"] = times["prepick"] + 0.5
+    # times["prepick"] = times["initial"] + np.linalg.norm(
+    #     X_GinitialGprepick.translation()
+    # )
+    times["prepick"] = times["initial"] + 0.8
+    times["pick_start"] = times["prepick"] + 0.4
     # times["pick_end"] = times["pick_start"] + 1.0
-    times["pick_end"] = 2.5
+    times["pick_end"] = times["pick_start"] + 0.2
     X_WG["pick_start"] = X_WG["pick"]
     X_WG["pick_end"] = X_WG["pick"]
     # times["postpick"] = times["pick_end"] + 1.0
-    times["postpick"] = 3
+    times["postpick"] = times["pick_end"] + 0.4
     X_WG["postpick"] = RigidTransform(
-        RotationMatrix.MakeXRotation(-np.pi / 2), [0, 0, 0.7]
+        RotationMatrix.MakeXRotation(-np.pi / 2), [0, 0, 0.6]
     )
     times["end"] = times["postpick"] + 10.0
     X_WG["end"] = X_WG["postpick"]

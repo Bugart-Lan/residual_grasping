@@ -163,15 +163,15 @@ def GenerateAntipodalGraspCandidate(
         wsg = plant.GetBodyByName("body")
         wsg_body_index = wsg.index()
 
-    index = rng.integers(0, cloud.size() - 1)
+    index = rng.integers(0, cloud.size())
 
     # Use S for sample point/frame.
     p_WS = cloud.xyz(index)
     n_WS = cloud.normal(index)
 
-    assert np.isclose(
-        np.linalg.norm(n_WS), 1.0
-    ), f"Normal has magnitude: {np.linalg.norm(n_WS)}"
+    if not np.isclose(np.linalg.norm(n_WS), 1.0):
+        print(f"Normal has magnitude: {np.linalg.norm(n_WS)}")
+        return np.inf, None
 
     Gx = n_WS  # gripper x axis aligns with normal
     # make orthonormal y axis, aligned with world down

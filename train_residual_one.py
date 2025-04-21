@@ -3,11 +3,13 @@ import os
 import sys
 
 import gymnasium as gym
+import numpy as np
+import torch
 import wandb
 
 from psutil import cpu_count
 from pydrake.all import StartMeshcat
-from stable_baselines3 import PPO
+from stable_baselines3 import DDPG, PPO, SAC, TD3
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
@@ -29,7 +31,7 @@ def main():
 
     config = {
         "policy_type": "MlpPolicy",
-        "total_timesteps": 5e5 if not args.test else 5,
+        "total_timesteps": 5e3 if not args.test else 5,
         "env_name": "ResidualGraspOne-v0",
         "env_time_limit": 3 if not args.test else 0.5,
         "observations": "state",
@@ -49,7 +51,7 @@ def main():
     zip = "data/residual_grasp_one.zip"
 
     # num_cpu = int(cpu_count() / 4)
-    num_cpu = 36
+    num_cpu = 24
     if args.train_single_env:
         meshcat = StartMeshcat()
         env = gym.make(
@@ -67,6 +69,7 @@ def main():
             return gym.make(
                 config["env_name"],
                 time_limit=config["env_time_limit"],
+                obs_noise=True,
             )
 
         print(f"Number of CPU used for training = {num_cpu}")
@@ -77,36 +80,44 @@ def main():
             vec_env_cls=SubprocVecEnv,
         )
 
+
+    policy_kwargs = {
+        "net_arch": [64, 64],
+        "activation_fn": torch.nn.ReLU
+    }
     if args.test:
         print("Testing mode")
-        model = PPO(
+        model = DDPG(
             config["policy_type"],
             env,
-            n_steps=4,
+            # n_steps=4,
             n_epochs=2,
             batch_size=4,
-            device="cpu",
+            # device="cpu",
         )
     elif os.path.exists(zip):
         print(f"Loading model @ {zip}")
-        model = PPO.load(
+        model = DDPG.load(
             zip,
             env,
             verbose=1,
             tensorboard_log=args.log_path or f"runs/{run.id}",
-            device="cpu",
+            # device="cpu",
         )
     else:
-        print("Creating PPO model...")
-        model = PPO(
+        print("Creating SAC model...")
+        model = SAC(
             config["policy_type"],
             env,
-            n_steps=128,
-            n_epochs=3,
-            batch_size=64,
+            learning_rate=1e-4,
+            buffer_size=int(1e6),
+            batch_size=256,
+            tau=0.01,
+            ent_coef="auto",
+            target_entropy=-np.prod(env.action_space.shape),
+            policy_kwargs=policy_kwargs,
             verbose=1,
             tensorboard_log=args.log_path or f"runs/{run.id}",
-            device="cpu",
         )
 
     total_params = sum(p.numel() for p in model.policy.parameters() if p.requires_grad)
