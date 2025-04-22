@@ -64,8 +64,8 @@ class SE3Adder(LeafSystem):
             else np.array([1, 0, 0, 0])
         )
         t = transform.translation() + r[4:]
-        t[:2] = np.clip(t[:2], -0.2, 0.2)
-        t[2] = np.clip(t[2], 0.05, 0.25)
+        t[:2] = np.clip(t[:2], -0.4, 0.4)
+        t[2] = np.clip(t[2], 0., 0.25)
         output.set_value((0, RigidTransform(Quaternion(q), t)))
 
 
@@ -395,11 +395,14 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
             z = RotationMatrix(RollPitchYaw(gripper_state[5:2:-1])).matrix()[:, 2]
             tar = gripper_state[0:3] - 0.2 * z
             cost = np.linalg.norm(actions)
+            reward = 10 if object_state[6] > height_threshold else 1
             if time < 3:
                 cost += np.linalg.norm(tar - object_state[4:7])
-            # print(f"@ t = {time}, cost = {cost}")                cost += np.linalg.norm(tar - object_state[4:7])
+            if time > wait_time:
+                output[0] = reward - cost
+            else:
+                output[0] = 0
 
-                output[0] = reward
 
     reward = builder.AddSystem(RewardSystem())
     builder.Connect(

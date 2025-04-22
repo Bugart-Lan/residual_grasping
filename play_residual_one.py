@@ -29,7 +29,7 @@ def main():
     meshcat.StartRecording()
     total_reward = 0
     n_success = 0
-    for i in range(100):
+    for i in range(1000):
         action, state = model.predict(obs, deterministic=True)
         print(f"action = {action}")
         # action = np.zeros(7)
@@ -41,8 +41,8 @@ def main():
         env.render()
         
         if terminated:
-            meshcat.PublishRecording()
-            input("Press Enter to continue...")
+            # meshcat.PublishRecording()
+            # input("Press Enter to continue...")
             obs, _ = env.reset()
 
     meshcat.PublishRecording()
