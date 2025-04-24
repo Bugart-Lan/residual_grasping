@@ -146,29 +146,29 @@ class ActionToSE3(LeafSystem):
 
 
 class PointCloudMerger(LeafSystem):
-    def __init__(self, noise=False):
+    def __init__(self, noise=False, meshcat=None):
         LeafSystem.__init__(self)
         model_point_cloud = AbstractValue.Make(PointCloud())
         self.DeclareAbstractInputPort("cloud0", model_point_cloud)
         self.DeclareAbstractInputPort("cloud1", model_point_cloud)
         self.DeclareAbstractInputPort("cloud2", model_point_cloud)
-        self._crop_lower = [-0.2, -0.2, 0.]
+        self._crop_lower = [-0.2, -0.2, 0.0]
         self._crop_upper = [0.2, 0.2, 0.25]
         self.DeclareAbstractOutputPort(
             "cloud", lambda: model_point_cloud, self.CalcOutput
         )
         self._noise = noise
+        self._meshcat = meshcat
 
     def CalcOutput(self, context, output):
         pcd = []
         for i in range(3):
             cloud = self.get_input_port(i).Eval(context)
-            if self._noise:
-                p = cloud.mutable_xyzs()
-                p += np.array([[0.05], [0], [0]])
             pcd.append(cloud.Crop(self._crop_lower, self._crop_upper))
         merged_pcd = Concatenate(pcd)
         down_sampled_pcd = merged_pcd.VoxelizedDownSample(voxel_size=0.005)
+        if self._meshcat:
+            self._meshcat.SetObject("merger/cloud", down_sampled_pcd, point_size=0.003)
         output.set_value(down_sampled_pcd)
 
 

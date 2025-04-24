@@ -1,4 +1,3 @@
-from math import isfinite
 from typing import Callable, Optional
 
 import gymnasium as gym
@@ -29,7 +28,7 @@ from pydrake.systems.analysis import Simulator, SimulatorStatus
 from pydrake.systems.drawing import plot_graphviz
 from pydrake.systems.framework import Context, DiagramBuilder, EventStatus, LeafSystem
 from pydrake.systems.sensors import CameraInfo, ImageRgba8U
-from pydrake.systems.primitives import ConstantVectorSource
+from pydrake.systems.primitives import ConstantVectorSource, PassThrough
 from pydrake.visualization import AddFrameTriadIllustration
 from manipulation.scenarios import AddRgbdSensors
 
@@ -54,6 +53,7 @@ class SE3Adder(LeafSystem):
 
     def CalcOutput(self, context, output):
         r = self.get_input_port(0).Eval(context)
+        print("residual =", r)
         cost, transform = self.get_input_port(1).Eval(context)
         if not np.isfinite(cost):
             transform = RigidTransform.Identity()
@@ -63,9 +63,12 @@ class SE3Adder(LeafSystem):
             if np.linalg.norm(q) > 1e-6
             else np.array([1, 0, 0, 0])
         )
+        print("t =", transform.translation())
         t = transform.translation() + r[4:]
+        print("dt =", r[4:])
+        print("t =", t)
         t[:2] = np.clip(t[:2], -0.4, 0.4)
-        t[2] = np.clip(t[2], 0., 0.25)
+        t[2] = np.clip(t[2], 0.0, 0.25)
         output.set_value((0, RigidTransform(Quaternion(q), t)))
 
 
@@ -102,6 +105,9 @@ OBJECTS = {
         "url": "package://drake_models/ycb/010_potted_meat_can.sdf",
     },
 }
+
+t_graspend = 2.1
+t_end = 3.1
 height_threshold = 0.25  # z-coord higher than this threshold is considered as a success
 
 # Camera parameters
@@ -149,7 +155,7 @@ def reset_all_objects(plant, context=None, active="sugar", rng=None):
             transform = RigidTransform(RotationMatrix(Quaternion(q)), [x, y, z])
         else:
             # TODO: Make it don't start at the same location
-            transform = RigidTransform([1, 1, -1])
+            transform = RigidTransform([1, 1, -1] + rng.random(3) - 1)
 
         if plant.is_finalized():
             plant.SetFreeBodyPose(context, plant.GetBodyByName(val["base"]), transform)
@@ -164,7 +170,7 @@ def load_scenario(meshcat=None, obj_name="sugar", rng=None):
         time_step=sim_time_step,
         contact_model=contact_model,
         discrete_contact_approximation=contact_approximation,
-        penetration_allowance=1e-4
+        penetration_allowance=1e-4,
     )
     plant, scene_graph = AddMultibodyPlant(multibody_plant_config, builder)
     parser = Parser(plant)
@@ -288,7 +294,7 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
                 plant.GetBodyIndices(plant.GetModelInstanceByName("camera1"))[0],
                 plant.GetBodyIndices(plant.GetModelInstanceByName("camera2"))[0],
             ],
-            meshcat=meshcat,
+            meshcat=meshcat if debug else None,
             noise=obs_noise,
         )
     )
@@ -308,13 +314,15 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
         scenario.GetOutputPort("body_poses"), grasp_selector.GetInputPort("body_poses")
     )
 
-    planner = builder.AddSystem(GraspPlanner(plant))
+    planner = builder.AddSystem(GraspPlanner(plant, wait_time=wait_time))
     builder.Connect(
         scenario.GetOutputPort("body_poses"), planner.GetInputPort("body_poses")
     )
 
+    actions = builder.AddSystem(PassThrough(7))
+    builder.ExportInput(actions.get_input_port(0), "actions")
     adder = builder.AddSystem(SE3Adder())
-    builder.ExportInput(adder.get_input_port(0), "actions")
+    builder.Connect(actions.get_output_port(0), adder.get_input_port(0))
     builder.Connect(grasp_selector.get_output_port(0), adder.get_input_port(1))
     builder.Connect(adder.get_output_port(0), planner.GetInputPort("grasp"))
     pose_to_position = builder.AddSystem(
@@ -346,27 +354,28 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
 
         def CalcObs(self, context, output):
             time = context.get_time()
-            if 2 >= time >= wait_time:
-                # print(time, "obs")
+            if t_graspend > time >= wait_time:
                 cost, grasp = self.get_input_port(0).Eval(context)
                 q = grasp.rotation().ToQuaternion().wxyz()
                 t = grasp.translation()
                 cloud = self.get_input_port(1).Eval(context)
-                cloud.resize(cloud_size)
-
                 if self.noise:
-                    pass
-
+                    points = cloud.mutable_xyzs()
+                    points += np.array([[0.05], [0], [0]])
+                if debug and meshcat:
+                    meshcat.SetObject("observations/cloud", cloud, point_size=0.003)
+                cloud.resize(cloud_size)
                 output.SetFromVector(
                     np.concatenate([q, t, np.nan_to_num(cloud.xyzs().reshape(-1))])
                 )
             else:
-                # print(time, "no obs")
                 output.SetFromVector(np.zeros(7 + 3 * cloud_size))
 
     obs_pub = builder.AddSystem(ObservationPublisher(noise=obs_noise))
     builder.Connect(grasp_selector.get_output_port(0), obs_pub.get_input_port(0))
-    merger = builder.AddSystem(PointCloudMerger(noise=obs_noise))
+    merger = builder.AddSystem(
+        PointCloudMerger(noise=obs_noise, meshcat=meshcat if debug else None)
+    )
     builder.Connect(
         scenario.GetOutputPort("camera0_point_cloud"), merger.get_input_port(0)
     )
@@ -391,18 +400,18 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
             time = context.get_time()
             object_state = self.get_input_port(0).Eval(context)
             gripper_state = self.get_input_port(1).Eval(context)
-            actions = self.get_input_port(2).Eval(context) 
+            actions = self.get_input_port(2).Eval(context)
+            print("reward actions =", actions)
             z = RotationMatrix(RollPitchYaw(gripper_state[5:2:-1])).matrix()[:, 2]
             tar = gripper_state[0:3] - 0.2 * z
             cost = np.linalg.norm(actions)
             reward = 10 if object_state[6] > height_threshold else 1
-            if time < 3:
+            if time < t_end:
                 cost += np.linalg.norm(tar - object_state[4:7])
             if time > wait_time:
                 output[0] = reward - cost
             else:
                 output[0] = 0
-
 
     reward = builder.AddSystem(RewardSystem())
     builder.Connect(
@@ -413,7 +422,7 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
         scenario.GetOutputPort("sphere_state"),
         reward.get_input_port(1),
     )
-    builder.ConnectInput("actions", reward.get_input_port(2))
+    builder.Connect(actions.get_output_port(0), reward.get_input_port(2))
     builder.ExportOutput(reward.get_output_port(), "reward")
 
     diagram = builder.Build()
@@ -421,11 +430,6 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
     simulator.Initialize()
 
     def monitor(context):
-        # scenario_context = scenario.GetMyContextFromRoot(context)
-        # obj_state = scenario.GetOutputPort("object_state").Eval(scenario_context)
-        # if obj_state[6] < 0:
-        #     print("Terminal: Object falls below 0.")
-        #     return EventStatus.ReachedTermination(diagram, "object falls below 0")
         if context.get_time() > time_limit:
             return EventStatus.ReachedTermination(diagram, "time limit")
         return EventStatus.Succeeded()
@@ -470,10 +474,6 @@ def reset_handler(simulator, diagram_context, seed):
         [OBJECTS[active_object]["id"]]
     )
     reset_all_objects(plant, context=plant_context, active=active_object, rng=rng)
-    pose = plant.EvalBodyPoseInWorld(
-        plant_context, plant.GetBodyByName(OBJECTS[active_object]["base"])
-    )
-    # print(f"Active object = {active_object}, z-position = {pose.translation()[2]}")
 
 
 def info_handler(simulator: Simulator) -> dict:
@@ -522,9 +522,9 @@ class CustomDrakeGymEnv(DrakeGymEnv):
             if time < self._wait_time:
                 status = self.simulator.AdvanceTo(self._wait_time)
             else:
-                status = self.simulator.AdvanceTo(2)
+                status = self.simulator.AdvanceTo(t_graspend)
                 total_reward += self.reward(self.simulator.get_system(), context)
-                status = self.simulator.AdvanceTo(3.1)
+                status = self.simulator.AdvanceTo(t_end)
                 total_reward += self.reward(self.simulator.get_system(), context)
         except RuntimeError as e:
             warnings.warn("Calling Done after catching RuntimeError")
@@ -537,16 +537,13 @@ class CustomDrakeGymEnv(DrakeGymEnv):
             return prev_observation, reward, terminated, truncated, info
 
         observation = self.observation_port.Eval(context)
-        # reward = self.reward(self.simulator.get_system(), context)
         terminated = not truncated and (
             status.reason() == SimulatorStatus.ReturnReason.kReachedTerminationCondition
         )
         info = self.info_handler(self.simulator)
         return observation, total_reward, terminated, truncated, info
-    
-    def reset(self, *,
-              seed: Optional[int] = None,
-              options: Optional[dict] = None):
+
+    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         observations, info = super().reset(seed=seed, options=options)
         try:
             context = self.simulator.get_context()
@@ -569,7 +566,11 @@ def DrakeResidualGraspOneStepEnv(
 ):
     wait_time = 0.8
     simulator = make_sim(
-        meshcat=meshcat, time_limit=time_limit, wait_time=wait_time, debug=debug, obs_noise=obs_noise
+        meshcat=meshcat,
+        time_limit=time_limit,
+        wait_time=wait_time,
+        debug=debug,
+        obs_noise=obs_noise,
     )
 
     # Define action space
@@ -594,7 +595,7 @@ def DrakeResidualGraspOneStepEnv(
         observation_port_id="observations",
         reset_handler=reset_handler,
         info_handler=info_handler,
-        wait_time=wait_time
+        wait_time=wait_time,
     )
 
     return env

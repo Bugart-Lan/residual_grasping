@@ -243,7 +243,7 @@ class GraspSelector(LeafSystem):
         )
         port.disable_caching_by_default()
 
-        self._crop_lower = [-0.2, -0.2, 0.]
+        self._crop_lower = [-0.2, -0.2, 0.0]
         self._crop_upper = [0.2, 0.2, 0.25]
 
         self._internal_model = make_internal_model(meshcat)
@@ -259,10 +259,6 @@ class GraspSelector(LeafSystem):
         pcd = []
         for i in range(3):
             cloud = self.get_input_port(i).Eval(context)
-            # Add constant offset to point cloud
-            if self._noise:
-                p = cloud.mutable_xyzs()
-                p += np.array([[0.05], [0], [0]])
             pcd.append(cloud.Crop(self._crop_lower, self._crop_upper))
             pcd[i].EstimateNormals(radius=0.1, num_closest=30)
 
@@ -271,6 +267,10 @@ class GraspSelector(LeafSystem):
             pcd[i].FlipNormalsTowardPoint(X_WC.translation())
         merged_pcd = Concatenate(pcd)
         down_sampled_pcd = merged_pcd.VoxelizedDownSample(voxel_size=0.005)
+        # Add constant offset to point cloud
+        if self._noise:
+            p = down_sampled_pcd.mutable_xyzs()
+            p += np.array([[0.05], [0], [0]])
         if self._meshcat:
             self._meshcat.SetObject(
                 "intenral/cloud", down_sampled_pcd, point_size=0.003
