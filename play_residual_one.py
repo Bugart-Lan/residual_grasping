@@ -33,17 +33,17 @@ def main():
     for i in range(1000):
         action, state = model.predict(obs, deterministic=True)
         print(f"action = {action}")
-        action = np.array([0, 0, 0, 0, -0.05, 0, 0])
+        # action = np.array([0, 0, 0, 0, -0.05, 0, 0])
         obs, reward, terminated, truncated, info = env.step(action)
         print(terminated, truncated)
         print(f"reward = {reward}")
         total_reward += reward
-        n_success += reward >= 2
+        n_success += reward >= 1
         env.render()
 
         if terminated:
-            meshcat.PublishRecording()
-            input("Press Enter to continue...")
+            # meshcat.PublishRecording()
+            # input("Press Enter to continue...")
             obs, _ = env.reset()
 
     meshcat.PublishRecording()

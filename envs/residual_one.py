@@ -53,7 +53,6 @@ class SE3Adder(LeafSystem):
 
     def CalcOutput(self, context, output):
         r = self.get_input_port(0).Eval(context)
-        print("residual =", r)
         cost, transform = self.get_input_port(1).Eval(context)
         if not np.isfinite(cost):
             transform = RigidTransform.Identity()
@@ -63,10 +62,7 @@ class SE3Adder(LeafSystem):
             if np.linalg.norm(q) > 1e-6
             else np.array([1, 0, 0, 0])
         )
-        print("t =", transform.translation())
         t = transform.translation() + r[4:]
-        print("dt =", r[4:])
-        print("t =", t)
         t[:2] = np.clip(t[:2], -0.4, 0.4)
         t[2] = np.clip(t[2], 0.0, 0.25)
         output.set_value((0, RigidTransform(Quaternion(q), t)))
@@ -123,7 +119,7 @@ CAMERA_INSTANCE_PREFIX = "camera"
 cloud_size = 400
 
 # Gym parameters
-sim_time_step = 0.005
+sim_time_step = 0.01
 gym_time_step = 0.1
 controller_time_step = 0.01
 gym_time_limit = 5
@@ -347,8 +343,11 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
                 "grasp", AbstractValue.Make((np.inf, RigidTransform()))
             )
             self.DeclareAbstractInputPort("cloud", AbstractValue.Make(PointCloud()))
+            # self.DeclareVectorOutputPort(
+            #     "observations", 7 + 3 * cloud_size, self.CalcObs
+            # )
             self.DeclareVectorOutputPort(
-                "observations", 7 + 3 * cloud_size, self.CalcObs
+                "observations", 3 * cloud_size, self.CalcObs
             )
             self.noise = noise
 
@@ -365,11 +364,13 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
                 if debug and meshcat:
                     meshcat.SetObject("observations/cloud", cloud, point_size=0.003)
                 cloud.resize(cloud_size)
-                output.SetFromVector(
-                    np.concatenate([q, t, np.nan_to_num(cloud.xyzs().reshape(-1))])
-                )
+                output.SetFromVector(np.nan_to_num(cloud.xyzs().reshape(-1)))
+                # output.SetFromVector(
+                #     np.concatenate([q, t, np.nan_to_num(cloud.xyzs().reshape(-1))])
+                # )
             else:
-                output.SetFromVector(np.zeros(7 + 3 * cloud_size))
+                # output.SetFromVector(np.zeros(7 + 3 * cloud_size))
+                output.SetFromVector(np.zeros(3 * cloud_size))
 
     obs_pub = builder.AddSystem(ObservationPublisher(noise=obs_noise))
     builder.Connect(grasp_selector.get_output_port(0), obs_pub.get_input_port(0))
@@ -401,15 +402,16 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
             object_state = self.get_input_port(0).Eval(context)
             gripper_state = self.get_input_port(1).Eval(context)
             actions = self.get_input_port(2).Eval(context)
-            print("reward actions =", actions)
             z = RotationMatrix(RollPitchYaw(gripper_state[5:2:-1])).matrix()[:, 2]
             tar = gripper_state[0:3] - 0.2 * z
             cost = np.linalg.norm(actions)
-            reward = 10 if object_state[6] > height_threshold else 1
-            if time < t_end:
-                cost += np.linalg.norm(tar - object_state[4:7])
+            reward = 10 if object_state[6] > height_threshold else 0.1
+            if reward == 10:
+                print(f"Successful grasp @ t = {time}")
+            # if time < t_end:
+            #     cost += np.linalg.norm(tar - object_state[4:7])
             if time > wait_time:
-                output[0] = reward - cost
+                output[0] = reward
             else:
                 output[0] = 0
 
@@ -430,7 +432,9 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
     simulator.Initialize()
 
     def monitor(context):
-        if context.get_time() > time_limit:
+        time = context.get_time()
+        if time > time_limit:
+            # print("Reach time termination.")
             return EventStatus.ReachedTermination(diagram, "time limit")
         return EventStatus.Succeeded()
 
@@ -512,7 +516,7 @@ class CustomDrakeGymEnv(DrakeGymEnv):
     def step(self, action):
         context = self.simulator.get_context()
         time = context.get_time()
-        print(f"Action @ t = {time}: {action}")
+        print(f"Step: action @ t = {time}: {action}")
         self.action_port.FixValue(context, action)
         truncated = False
 
@@ -544,21 +548,14 @@ class CustomDrakeGymEnv(DrakeGymEnv):
         return observation, total_reward, terminated, truncated, info
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
-        observations, info = super().reset(seed=seed, options=options)
+        observation, info = super().reset(seed=seed, options=options)
         try:
-            context = self.simulator.get_context()
-            self.action_port.FixValue(context, np.zeros(7))
-            self.simulator.AdvanceTo(self._wait_time)
+            observation, reward, terminated, truncated, info = self.step(np.zeros(7))
+            return observation, info
         except RuntimeError as e:
             warnings.warn("Calling Done after catching RuntimeError (reset)")
             warnings.warn(e.args[0])
-            return observations, dict()
-
-        context = self.simulator.get_mutable_context()
-        observations = self.observation_port.Eval(context)
-        info = self.info_handler(self.simulator)
-
-        return observations, info
+            return observation, dict()
 
 
 def DrakeResidualGraspOneStepEnv(
@@ -581,8 +578,11 @@ def DrakeResidualGraspOneStepEnv(
     )
 
     # Define observation space
+    # observation_space = gym.spaces.Box(
+    #     low=-1, high=1, shape=(7 + cloud_size * 3,), dtype=np.float64
+    # )
     observation_space = gym.spaces.Box(
-        low=-1, high=1, shape=(7 + cloud_size * 3,), dtype=np.float64
+        low=-1, high=1, shape=(cloud_size * 3,), dtype=np.float64
     )
 
     env = CustomDrakeGymEnv(

@@ -51,7 +51,7 @@ def main():
     zip = "data/residual_grasp_one.zip"
 
     # num_cpu = int(cpu_count() / 4)
-    num_cpu = 40
+    num_cpu = 12
     if args.train_single_env:
         meshcat = StartMeshcat()
         env = gym.make(
@@ -83,11 +83,11 @@ def main():
     policy_kwargs = {"net_arch": [64, 64], "activation_fn": torch.nn.ReLU}
     if args.test:
         print("Testing mode")
-        model = DDPG(
+        model = SAC(
             config["policy_type"],
             env,
             # n_steps=4,
-            n_epochs=2,
+            # n_epochs=2,
             batch_size=4,
             # device="cpu",
         )
@@ -106,7 +106,7 @@ def main():
             # device="cpu",
         )
     else:
-        print("Creating PPO model...")
+        print("Creating SAC model...")
         model = SAC(
             config["policy_type"],
             env,

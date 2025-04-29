@@ -15,6 +15,11 @@ to debug and test for proper implementation.
 tensorboard --logdir runs
 ```
 
+## Results (04/25)
+Residual policy: 662/1000
+Residual policy (without prediction known): 710/1000
+
+
 ### Notes
 When running on lab computers, run the following command in the parent folder to include Drake.
 ```

@@ -1,2 +1,5 @@
-cat /proc/sys/vm/overcommit_memory
-echo 1 > /proc/sys/vm/overcommit_memory
+TODO:
+1. run residual policy without the predicted pose
+2. test 
+3. run end-to-end policy
+4. test
