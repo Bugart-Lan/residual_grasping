@@ -2,18 +2,19 @@ import argparse
 import os
 import sys
 
+
 import gymnasium as gym
 import wandb
+import torch
 
-from psutil import cpu_count
 from pydrake.all import StartMeshcat
-from stable_baselines3 import PPO
+from stable_baselines3 import SAC
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from wandb.integration.sb3 import WandbCallback
 
-import envs.one_step_end2end_grasp
+import envs.e2e_one
 
 
 def main():
@@ -29,8 +30,8 @@ def main():
 
     config = {
         "policy_type": "MlpPolicy",
-        "total_timesteps": 5e5 if not args.test else 5,
-        "env_name": "OneStepEnd2EndGrasp-v0",
+        "total_timesteps": 5e4 if not args.test else 5,
+        "env_name": "EndToEndGraspOne-v0",
         "env_time_limit": 3 if not args.test else 0.5,
         "observations": "state",
     }
@@ -46,10 +47,9 @@ def main():
     else:
         run = wandb.init(mode="disabled")
 
-    zip = "data/one_step_e2e.zip"
+    zip = "data/e2e_grasp_one.zip"
 
-    # num_cpu = int(cpu_count() / 4)
-    num_cpu = 36
+    num_cpu = 12
     if args.train_single_env:
         meshcat = StartMeshcat()
         env = gym.make(
@@ -57,6 +57,7 @@ def main():
             meshcat=meshcat,
             time_limit=config["env_time_limit"],
             debug=True,
+            obs_noise=True,
         )
         check_env(env)
         input("Open meshcat (optional). Press Enter to continue...")
@@ -66,46 +67,34 @@ def main():
             return gym.make(
                 config["env_name"],
                 time_limit=config["env_time_limit"],
+                obs_noise=True,
             )
 
         print(f"Number of CPU used for training = {num_cpu}")
         env = make_vec_env(
             make_env,
             n_envs=num_cpu,
-            seed=0,
+            seed=1,
             vec_env_cls=SubprocVecEnv,
         )
 
+    policy_kwargs = {"net_arch": [64, 64], "activation_fn": torch.nn.ReLU}
     if args.test:
         print("Testing mode")
-        model = PPO(
-            config["policy_type"],
-            env,
-            n_steps=4,
-            n_epochs=2,
-            batch_size=4,
-            device="cpu",
-        )
+        model = SAC(config["policy_type"], env, batch_size=4)
     elif os.path.exists(zip):
         print(f"Loading model @ {zip}")
-        model = PPO.load(
-            zip,
-            env,
-            verbose=1,
-            tensorboard_log=args.log_path or f"runs/{run.id}",
-            device="cpu",
+        model = SAC.load(
+            zip, env, verbose=1, tensorboard_log=args.log_path or f"runs/{run.id}"
         )
     else:
-        print("Creating PPO model...")
-        model = PPO(
+        print("Creating SAC model...")
+        model = SAC(
             config["policy_type"],
             env,
-            n_steps=1024,
-            n_epochs=5,
-            batch_size=64,
+            policy_kwargs=policy_kwargs,
             verbose=1,
             tensorboard_log=args.log_path or f"runs/{run.id}",
-            device="cpu",
         )
 
     total_params = sum(p.numel() for p in model.policy.parameters() if p.requires_grad)

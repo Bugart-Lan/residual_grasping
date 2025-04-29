@@ -146,7 +146,7 @@ class ActionToSE3(LeafSystem):
 
 
 class PointCloudMerger(LeafSystem):
-    def __init__(self, noise=False, meshcat=None):
+    def __init__(self, meshcat=None):
         LeafSystem.__init__(self)
         model_point_cloud = AbstractValue.Make(PointCloud())
         self.DeclareAbstractInputPort("cloud0", model_point_cloud)
@@ -157,7 +157,6 @@ class PointCloudMerger(LeafSystem):
         self.DeclareAbstractOutputPort(
             "cloud", lambda: model_point_cloud, self.CalcOutput
         )
-        self._noise = noise
         self._meshcat = meshcat
 
     def CalcOutput(self, context, output):

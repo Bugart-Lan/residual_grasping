@@ -39,23 +39,25 @@ from utils import (
 
 from GraspPlanner import GraspPlanner
 
-height_threshold = 0.3  # z-coord higher than this threshold is considered as a success
-
-cloud_size = 1000
+t_graspend = 2.1
+t_end = 3.1
+height_threshold = 0.25  # z-coord higher than this threshold is considered as a success
 
 # Camera parameters
-width = 86
-height = 86
-channel = 1
+width = 80
+height = 80
+channel = 4
 foy_y = np.pi / 4.0
 near = 0.1
 far = 10.0
 renderer = "my_renderer"
 image_size = width * height * 4
+CAMERA_INSTANCE_PREFIX = "camera"
+cloud_size = 400
 
 # Gym parameters
-sim_time_step = 0.001
-gym_time_step = 0.05
+sim_time_step = 0.01
+gym_time_step = 0.1
 controller_time_step = 0.01
 gym_time_limit = 5
 drake_contact_models = ["point", "hydroelastic_with_fallback"]
@@ -63,7 +65,6 @@ contact_model = drake_contact_models[0]
 drake_contact_approximations = ["sap", "tamsi", "similar", "lagged"]
 contact_approximation = drake_contact_approximations[0]
 
-obj_name = "sugar"
 
 gripper_transform = RigidTransform(
     RotationMatrix.MakeXRotation(-np.pi / 2), [0, 0, -0.1]

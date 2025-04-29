@@ -38,13 +38,10 @@ from GraspSelector import GraspSelector
 from GraspPlanner import GraspPlanner
 
 
-class SE3Adder(LeafSystem):
+class Vec2SE3(LeafSystem):
     def __init__(self):
         LeafSystem.__init__(self)
-        self.DeclareVectorInputPort("residual", 7)  # [quaternion xyz] from actions
-        self.DeclareAbstractInputPort(
-            "grasp_selction", AbstractValue.Make((np.inf, RigidTransform()))
-        )
+        self.DeclareVectorInputPort("actions", 7)
         self.DeclareAbstractOutputPort(
             "X_WG",
             lambda: AbstractValue.Make((np.inf, RigidTransform())),
@@ -52,20 +49,9 @@ class SE3Adder(LeafSystem):
         )
 
     def CalcOutput(self, context, output):
-        r = self.get_input_port(0).Eval(context)
-        cost, transform = self.get_input_port(1).Eval(context)
-        if not np.isfinite(cost):
-            transform = RigidTransform.Identity()
-        q = transform.rotation().ToQuaternion().wxyz() + r[:4]
-        q = (
-            q / np.linalg.norm(q)
-            if np.linalg.norm(q) > 1e-6
-            else np.array([1, 0, 0, 0])
-        )
-        t = transform.translation() + r[4:]
-        t[:2] = np.clip(t[:2], -0.4, 0.4)
-        t[2] = np.clip(t[2], 0.0, 0.25)
-        output.set_value((0, RigidTransform(Quaternion(q), t)))
+        x = self.get_input_port(0).Eval(context)
+        q = x[:4] / np.linalg.norm(x[:4])
+        output.set_value((0, RigidTransform(Quaternion(q), x[4:])))
 
 
 # Objects
@@ -129,8 +115,8 @@ drake_contact_approximations = ["sap", "tamsi", "similar", "lagged"]
 contact_approximation = drake_contact_approximations[0]
 
 gym.envs.register(
-    id="ResidualGraspOne-v0",
-    entry_point=("envs.residual_one:DrakeResidualGraspOneStepEnv"),
+    id="EndToEndGraspOne-v0",
+    entry_point=("envs.e2e_one:DrakeEndToEndGraspOneStepEnv"),
 )
 
 
@@ -282,44 +268,15 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
         load_scenario(meshcat=meshcat, obj_name=obj_name, rng=rng)
     )
     plant = scenario.GetSubsystemByName("plant")
-    grasp_selector = builder.AddSystem(
-        GraspSelector(
-            [
-                plant.GetBodyIndices(plant.GetModelInstanceByName("camera0"))[0],
-                plant.GetBodyIndices(plant.GetModelInstanceByName("camera1"))[0],
-                plant.GetBodyIndices(plant.GetModelInstanceByName("camera2"))[0],
-            ],
-            meshcat=meshcat if debug else None,
-            noise=obs_noise,
-        )
-    )
-    builder.Connect(
-        scenario.GetOutputPort("camera0_point_cloud"),
-        grasp_selector.GetInputPort("cloud0_W"),
-    )
-    builder.Connect(
-        scenario.GetOutputPort("camera1_point_cloud"),
-        grasp_selector.GetInputPort("cloud1_W"),
-    )
-    builder.Connect(
-        scenario.GetOutputPort("camera2_point_cloud"),
-        grasp_selector.GetInputPort("cloud2_W"),
-    )
-    builder.Connect(
-        scenario.GetOutputPort("body_poses"), grasp_selector.GetInputPort("body_poses")
-    )
 
     planner = builder.AddSystem(GraspPlanner(plant, wait_time=wait_time))
     builder.Connect(
         scenario.GetOutputPort("body_poses"), planner.GetInputPort("body_poses")
     )
 
-    actions = builder.AddSystem(PassThrough(7))
-    builder.ExportInput(actions.get_input_port(0), "actions")
-    adder = builder.AddSystem(SE3Adder())
-    builder.Connect(actions.get_output_port(0), adder.get_input_port(0))
-    builder.Connect(grasp_selector.get_output_port(0), adder.get_input_port(1))
-    builder.Connect(adder.get_output_port(0), planner.GetInputPort("grasp"))
+    toSE3 = builder.AddSystem(Vec2SE3())
+    builder.Connect(toSE3.get_output_port(0), planner.GetInputPort("grasp"))
+    builder.ExportInput(toSE3.get_input_port(0), "actions")
     pose_to_position = builder.AddSystem(
         GripperPoseToPosition(
             X_GB=RigidTransform(
@@ -338,23 +295,15 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
     class ObservationPublisher(LeafSystem):
         def __init__(self, noise=False):
             LeafSystem.__init__(self)
-            self.DeclareAbstractInputPort(
-                "grasp", AbstractValue.Make((np.inf, RigidTransform()))
-            )
             self.DeclareAbstractInputPort("cloud", AbstractValue.Make(PointCloud()))
-            # self.DeclareVectorOutputPort(
-            #     "observations", 7 + 3 * cloud_size, self.CalcObs
-            # )
+            # Output vector size is 3 * cloud_size for x, y, z
             self.DeclareVectorOutputPort("observations", 3 * cloud_size, self.CalcObs)
             self.noise = noise
 
         def CalcObs(self, context, output):
             time = context.get_time()
             if t_graspend > time >= wait_time:
-                cost, grasp = self.get_input_port(0).Eval(context)
-                q = grasp.rotation().ToQuaternion().wxyz()
-                t = grasp.translation()
-                cloud = self.get_input_port(1).Eval(context)
+                cloud = self.get_input_port(0).Eval(context)
                 if self.noise:
                     points = cloud.mutable_xyzs()
                     points += np.array([[0.05], [0], [0]])
@@ -362,15 +311,10 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
                     meshcat.SetObject("observations/cloud", cloud, point_size=0.003)
                 cloud.resize(cloud_size)
                 output.SetFromVector(np.nan_to_num(cloud.xyzs().reshape(-1)))
-                # output.SetFromVector(
-                #     np.concatenate([q, t, np.nan_to_num(cloud.xyzs().reshape(-1))])
-                # )
             else:
-                # output.SetFromVector(np.zeros(7 + 3 * cloud_size))
                 output.SetFromVector(np.zeros(3 * cloud_size))
 
     obs_pub = builder.AddSystem(ObservationPublisher(noise=obs_noise))
-    builder.Connect(grasp_selector.get_output_port(0), obs_pub.get_input_port(0))
     merger = builder.AddSystem(PointCloudMerger(meshcat=meshcat if debug else None))
     builder.Connect(
         scenario.GetOutputPort("camera0_point_cloud"), merger.get_input_port(0)
@@ -381,30 +325,21 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
     builder.Connect(
         scenario.GetOutputPort("camera2_point_cloud"), merger.get_input_port(2)
     )
-    builder.Connect(merger.get_output_port(0), obs_pub.get_input_port(1))
+    builder.Connect(merger.get_output_port(0), obs_pub.get_input_port(0))
     builder.ExportOutput(obs_pub.get_output_port(), "observations")
 
     class RewardSystem(LeafSystem):
         def __init__(self):
             LeafSystem.__init__(self)
             self.DeclareVectorInputPort("object_state", 13)
-            self.DeclareVectorInputPort("gripper_state", 12)
-            self.DeclareVectorInputPort("actions", 7)
             self.DeclareVectorOutputPort("reward", 1, self.CalcReward)
 
         def CalcReward(self, context, output):
             time = context.get_time()
             object_state = self.get_input_port(0).Eval(context)
-            gripper_state = self.get_input_port(1).Eval(context)
-            actions = self.get_input_port(2).Eval(context)
-            z = RotationMatrix(RollPitchYaw(gripper_state[5:2:-1])).matrix()[:, 2]
-            tar = gripper_state[0:3] - 0.2 * z
-            cost = np.linalg.norm(actions)
             reward = 10 if object_state[6] > height_threshold else 0.1
             if reward == 10:
                 print(f"Successful grasp @ t = {time}")
-            # if time < t_end:
-            #     cost += np.linalg.norm(tar - object_state[4:7])
             if time > wait_time:
                 output[0] = reward
             else:
@@ -415,11 +350,6 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
         scenario.GetOutputPort("object_state"),
         reward.get_input_port(0),
     )
-    builder.Connect(
-        scenario.GetOutputPort("sphere_state"),
-        reward.get_input_port(1),
-    )
-    builder.Connect(actions.get_output_port(0), reward.get_input_port(2))
     builder.ExportOutput(reward.get_output_port(), "reward")
 
     diagram = builder.Build()
@@ -429,9 +359,7 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
     def monitor(context):
         time = context.get_time()
         if time > time_limit:
-            # print("Reach time termination.")
             return EventStatus.ReachedTermination(diagram, "time limit")
-        return EventStatus.Succeeded()
 
     simulator.set_monitor(monitor)
 
@@ -439,7 +367,7 @@ def make_sim(meshcat=None, time_limit=5, wait_time=0.5, debug=False, obs_noise=F
         import pydot
 
         pydot.graph_from_dot_data(diagram.GetGraphvizString(max_depth=2))[0].write_png(
-            "images/ResidualGraspOne-v0-diagram.png"
+            "images/End2EndGraspOne-v0-diagram.png"
         )
 
     return simulator
@@ -516,15 +444,11 @@ class CustomDrakeGymEnv(DrakeGymEnv):
         truncated = False
 
         prev_observation = self.observation_port.Eval(context)
-        total_reward = 0
         try:
             if time < self._wait_time:
                 status = self.simulator.AdvanceTo(self._wait_time)
             else:
-                status = self.simulator.AdvanceTo(t_graspend)
-                total_reward += self.reward(self.simulator.get_system(), context)
                 status = self.simulator.AdvanceTo(t_end)
-                total_reward += self.reward(self.simulator.get_system(), context)
         except RuntimeError as e:
             warnings.warn("Calling Done after catching RuntimeError")
             warnings.warn(e.args[0])
@@ -536,11 +460,12 @@ class CustomDrakeGymEnv(DrakeGymEnv):
             return prev_observation, reward, terminated, truncated, info
 
         observation = self.observation_port.Eval(context)
+        reward = self.reward(self.simulator.get_system(), context)
         terminated = not truncated and (
             status.reason() == SimulatorStatus.ReturnReason.kReachedTerminationCondition
         )
         info = self.info_handler(self.simulator)
-        return observation, total_reward, terminated, truncated, info
+        return observation, reward, terminated, truncated, info
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         observation, info = super().reset(seed=seed, options=options)
@@ -553,7 +478,7 @@ class CustomDrakeGymEnv(DrakeGymEnv):
             return observation, dict()
 
 
-def DrakeResidualGraspOneStepEnv(
+def DrakeEndToEndGraspOneStepEnv(
     meshcat=None, time_limit=gym_time_limit, debug=False, obs_noise=False
 ):
     wait_time = 0.8
@@ -567,15 +492,12 @@ def DrakeResidualGraspOneStepEnv(
 
     # Define action space
     action_space = gym.spaces.Box(
-        low=np.asarray([-0.01, -0.01, -0.01, -0.01, -0.1, -0.1, -0.1]),
-        high=np.asarray([0.01, 0.01, 0.01, 0.01, 0.1, 0.1, 0.1]),
+        low=np.asarray([-1, -1, -1, -1, -0.5, -0.5, 0.0]),
+        high=np.asarray([1, 1, 1, 1, 0.5, 0.5, 0.5]),
         dtype=np.float64,
     )
 
     # Define observation space
-    # observation_space = gym.spaces.Box(
-    #     low=-1, high=1, shape=(7 + cloud_size * 3,), dtype=np.float64
-    # )
     observation_space = gym.spaces.Box(
         low=-1, high=1, shape=(cloud_size * 3,), dtype=np.float64
     )
