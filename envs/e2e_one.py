@@ -439,7 +439,7 @@ class CustomDrakeGymEnv(DrakeGymEnv):
     def step(self, action):
         context = self.simulator.get_context()
         time = context.get_time()
-        print(f"Step: action @ t = {time}: {action}")
+        # print(f"Step: action @ t = {time}: {action}")
         self.action_port.FixValue(context, action)
         truncated = False
 

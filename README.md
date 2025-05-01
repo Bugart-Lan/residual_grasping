@@ -16,8 +16,11 @@ tensorboard --logdir runs
 ```
 
 ## Results (04/25)
-Residual policy: 662/1000
-Residual policy (without prediction known): 710/1000
+Residual policy: 662/1000 (residual_0424)
+Residual policy (without prediction known): 710/1000 (residual_0425)
+End to end policy: 715/1000 (e2e_grasp_one)
+
+Residual Policy: 680 (no noise)
 
 
 ### Notes

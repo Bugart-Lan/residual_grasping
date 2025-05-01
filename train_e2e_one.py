@@ -47,9 +47,9 @@ def main():
     else:
         run = wandb.init(mode="disabled")
 
-    zip = "data/e2e_grasp_one.zip"
+    zip = "data/e2e_grasp_one_wo_noise.zip"
 
-    num_cpu = 12
+    num_cpu = 40
     if args.train_single_env:
         meshcat = StartMeshcat()
         env = gym.make(
@@ -57,7 +57,7 @@ def main():
             meshcat=meshcat,
             time_limit=config["env_time_limit"],
             debug=True,
-            obs_noise=True,
+            obs_noise=False,
         )
         check_env(env)
         input("Open meshcat (optional). Press Enter to continue...")
@@ -67,7 +67,7 @@ def main():
             return gym.make(
                 config["env_name"],
                 time_limit=config["env_time_limit"],
-                obs_noise=True,
+                obs_noise=False,
             )
 
         print(f"Number of CPU used for training = {num_cpu}")

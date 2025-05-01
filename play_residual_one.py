@@ -11,7 +11,7 @@ import envs.residual_one
 env_name = "ResidualGraspOne-v0"
 time_limit = 3
 time_step = 0.05
-zip = "data/residual_grasp_one"
+zip = "data/residual_grasp_one_wo_noise"
 
 
 def main():
@@ -22,8 +22,8 @@ def main():
         env_name,
         meshcat=meshcat,
         time_limit=time_limit,
-        obs_noise=True,
-        debug=True,
+        obs_noise=False,
+        debug=False,
     )
     model = SAC.load(zip, env)
     obs, _ = env.reset()
